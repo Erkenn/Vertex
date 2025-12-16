@@ -217,8 +217,6 @@ public class LevelManager : MonoBehaviour
         float levelTime = Time.timeSinceLevelLoad;
         Debug.Log($"⏱️ Время прохождения: {levelTime:F1} сек");
 
-        CheckLevelAchievements();
-
         if (currentLevelIndex < levels.Length - 1)
         {
             StartCoroutine(LoadNextLevelWithDelay(3f));
@@ -242,30 +240,6 @@ public class LevelManager : MonoBehaviour
         {
             currentLevelIndex = levelIndex;
             SceneManager.LoadScene($"Level_{levelIndex + 1}");
-        }
-    }
-
-    void CheckLevelAchievements()
-    {
-        if (GameManager.Instance == null) return;
-
-        switch (currentLevelIndex)
-        {
-            case 0:
-                if (GameManager.Instance.dataPacketsCollected >= levels[0].dataPackets)
-                {
-                    GameManager.Instance.UnlockAchievement("DataCollector");
-                }
-                break;
-            case 4:
-                GameManager.Instance.UnlockAchievement("CoreDestroyer");
-                break;
-        }
-
-        float levelTime = Time.timeSinceLevelLoad;
-        if (levelTime < levels[currentLevelIndex].levelTimeEstimate * 0.7f)
-        {
-            GameManager.Instance.UnlockAchievement("SpeedRunner");
         }
     }
 

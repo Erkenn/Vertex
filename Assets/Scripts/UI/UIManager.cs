@@ -1,7 +1,7 @@
 ﻿using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
-using System.Collections; // Добавил эту директиву
+using System.Collections;
 
 public class UIManager : MonoBehaviour
 {
@@ -25,6 +25,13 @@ public class UIManager : MonoBehaviour
     public GameObject gameOverMenu;
     public GameObject victoryMenu;
     public GameObject hudPanel;
+
+    [Header("=== МЕНЮ ПАУЗЫ ===")]
+    public GameObject pauseMenuPanel;
+    public Button resumeButton;
+    public Button restartButton;
+    public Button mainMenuButton;
+    public Button settingsButton;
 
     [Header("=== НЕОНОВЫЕ ЦВЕТА ===")]
     public Color neonBlue = new Color(0.2f, 0.6f, 1f, 1f);
@@ -70,9 +77,7 @@ public class UIManager : MonoBehaviour
     void FindGameReferences()
     {
         gameManager = GameManager.Instance;
-
-        // ИСПРАВЛЕННЫЙ КОД - замена устаревшего метода
-        player = FindFirstObjectByType<PlayerController>(); // ЗАМЕНА FindObjectOfType
+        player = FindFirstObjectByType<PlayerController>();
 
         if (player == null)
             Debug.LogWarning("UIManager: PlayerController не найден");
@@ -82,22 +87,21 @@ public class UIManager : MonoBehaviour
 
     void InitializeUI()
     {
-        // Скрыть все меню при старте
         if (pauseMenu != null) pauseMenu.SetActive(false);
         if (gameOverMenu != null) gameOverMenu.SetActive(false);
         if (victoryMenu != null) victoryMenu.SetActive(false);
         if (hudPanel != null) hudPanel.SetActive(true);
+        if (pauseMenuPanel != null) pauseMenuPanel.SetActive(false);
 
-        // Инициализация текстов
         UpdateHealthUI(100);
         UpdateAbilitiesUI(3, 2);
         UpdateDataPacketsUI(0);
         UpdateLevelUI(1);
+        SetupPauseMenuButtons();
     }
 
     void ApplyNeonStyling()
     {
-        // Применение неоновых эффектов к UI элементам
         if (healthBar != null)
         {
             healthBar.fillRect.GetComponent<Image>().color = neonGreen;
@@ -116,18 +120,15 @@ public class UIManager : MonoBehaviour
 
     void UpdateDynamicUI()
     {
-        // Обновление таймера
         if (timerText != null && gameManager != null)
         {
             timerText.text = FormatTime(gameManager.sessionTimer);
         }
 
-        // Обновление индикатора щита
         if (shieldActiveIndicator != null && player != null)
         {
             shieldActiveIndicator.gameObject.SetActive(player.isShieldActive);
 
-            // Пульсация при активном щите
             if (player.isShieldActive)
             {
                 float pulse = Mathf.PingPong(Time.time * 2f, 1f);
@@ -135,15 +136,11 @@ public class UIManager : MonoBehaviour
             }
         }
 
-        // Обновление перезарядки взлома
         if (hackCooldownOverlay != null && player != null)
         {
-            // Здесь нужно получить текущее время перезарядки от PlayerController
-            hackCooldownOverlay.fillAmount = 0f; // Временная реализация
+            hackCooldownOverlay.fillAmount = 0f;
         }
     }
-
-    // === ОБНОВЛЕНИЕ ОСНОВНЫХ UI ЭЛЕМЕНТОВ ===
 
     public void UpdateHealthUI(int currentHealth)
     {
@@ -157,7 +154,6 @@ public class UIManager : MonoBehaviour
         {
             healthBar.value = currentHealth / 100f;
 
-            // Анимация при получении урона
             if (healthAnimator != null && currentHealth < 100)
             {
                 healthAnimator.Play("HealthPulse");
@@ -186,7 +182,6 @@ public class UIManager : MonoBehaviour
         {
             dataPacketsText.text = $"ДАННЫЕ: {packets}";
 
-            // Анимация при сборе данных
             if (packets > 0)
             {
                 dataPacketsText.transform.localScale = Vector3.one * 1.2f;
@@ -204,23 +199,22 @@ public class UIManager : MonoBehaviour
         }
     }
 
-    // === СИСТЕМА МЕНЮ И ЭКРАНОВ ===
-
+    // Показать и спятать меню паузы при нажатии кнопки паузы
     public void ShowPauseMenu()
     {
-        if (pauseMenu != null)
+        if (pauseMenuPanel != null)
         {
-            pauseMenu.SetActive(true);
-            hudPanel.SetActive(false);
+            pauseMenuPanel.SetActive(true);
+            if (hudPanel != null) hudPanel.SetActive(false);
         }
     }
 
     public void HidePauseMenu()
     {
-        if (pauseMenu != null)
+        if (pauseMenuPanel != null)
         {
-            pauseMenu.SetActive(false);
-            hudPanel.SetActive(true);
+            pauseMenuPanel.SetActive(false);
+            if (hudPanel != null) hudPanel.SetActive(true);
         }
     }
 
@@ -229,9 +223,8 @@ public class UIManager : MonoBehaviour
         if (gameOverMenu != null)
         {
             gameOverMenu.SetActive(true);
-            hudPanel.SetActive(false);
+            if (hudPanel != null) hudPanel.SetActive(false);
 
-            // Установка причины поражения
             TextMeshProUGUI reasonText = gameOverMenu.GetComponentInChildren<TextMeshProUGUI>();
             if (reasonText != null)
             {
@@ -246,9 +239,8 @@ public class UIManager : MonoBehaviour
         if (victoryMenu != null)
         {
             victoryMenu.SetActive(true);
-            hudPanel.SetActive(false);
+            if (hudPanel != null) hudPanel.SetActive(false);
 
-            // Заполнение статистики
             TextMeshProUGUI statsText = victoryMenu.GetComponentInChildren<TextMeshProUGUI>();
             if (statsText != null)
             {
@@ -259,33 +251,74 @@ public class UIManager : MonoBehaviour
         }
     }
 
+    void SetupPauseMenuButtons()
+    {
+        if (resumeButton != null)
+            resumeButton.onClick.AddListener(OnResumeButtonClicked);
+
+        if (restartButton != null)
+            restartButton.onClick.AddListener(OnRestartButtonClicked);
+
+        if (mainMenuButton != null)
+            mainMenuButton.onClick.AddListener(OnMainMenuButtonClicked);
+
+        if (settingsButton != null)
+            settingsButton.onClick.AddListener(OnSettingsButtonClicked);
+    }
+
+    public void OnResumeButtonClicked()
+    {
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.TogglePause();
+            PlayUIClick();
+        }
+    }
+
+    public void OnRestartButtonClicked()
+    {
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.StartNewGame();
+            PlayUIClick();
+        }
+    }
+
+    public void OnMainMenuButtonClicked()
+    {
+        UnityEngine.SceneManagement.SceneManager.LoadScene("MainMenu");
+        PlayUIClick();
+    }
+
+    public void OnSettingsButtonClicked()
+    {
+        if (SettingsManager.Instance != null)
+        {
+            SettingsManager.Instance.ShowSettings();
+        }
+        PlayUIClick();
+    }
+
     public void ShowAchievementUnlocked(string achievementName, string description)
     {
-        // Создание pop-up уведомления о достижении
         StartCoroutine(ShowAchievementPopup(achievementName, description));
     }
 
     private IEnumerator ShowAchievementPopup(string name, string description)
     {
-        // Временная реализация - в будущем можно сделать префаб
         Debug.Log($"🏆 ДОСТИЖЕНИЕ: {name} - {description}");
         yield return new WaitForSeconds(2f);
     }
 
     public void ShowDeathScreen()
     {
-        // Эффект затемнения экрана при смерти
-        // Временная реализация
         Debug.Log("💀 Показан экран смерти");
     }
 
     public void HideDeathScreen()
     {
-        // Скрытие эффекта смерти
         Debug.Log("💀 Скрыт экран смерти");
     }
-
-    // === ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ ===
 
     private Color GetHealthColor(int health)
     {
@@ -309,32 +342,8 @@ public class UIManager : MonoBehaviour
         }
     }
 
-    // === ОБРАБОТЧИКИ UI СОБЫТИЙ ===
-
-    public void OnResumeButtonClicked()
+    private void PlayUIClick()
     {
-        if (gameManager != null)
-        {
-            gameManager.TogglePause();
-        }
-    }
-
-    public void OnRestartButtonClicked()
-    {
-        if (gameManager != null)
-        {
-            gameManager.StartNewGame();
-        }
-    }
-
-    public void OnMainMenuButtonClicked()
-    {
-        // Загрузка главного меню
-        UnityEngine.SceneManagement.SceneManager.LoadScene("MainMenu");
-    }
-
-    public void OnQuitButtonClicked()
-    {
-        Application.Quit();
+        Debug.Log("🔊 Воспроизведение звука клика UI");
     }
 }
