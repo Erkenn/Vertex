@@ -56,7 +56,6 @@ public class GameManager : MonoBehaviour
         currentLives = totalLives;
         sessionTimer = 0f;
         LoadAllPlayerData();
-        InitializeAchievements();
         InitializeHighScores();
     }
 
@@ -65,7 +64,6 @@ public class GameManager : MonoBehaviour
         if (isGameActive && !isPaused)
         {
             UpdateSessionTimer();
-            CheckAchievements();
         }
 
         if (Input.GetKeyDown(KeyCode.Escape))
@@ -88,13 +86,16 @@ public class GameManager : MonoBehaviour
         if (isPaused)
         {
             OnGamePause?.Invoke();
-            UIManager.Instance?.ShowPauseMenu();
+            UIManager.Instance?.ShowPauseMenu(); // Показываем меню паузы
             AutoSaveProgress();
         }
         else
         {
             OnGameResume?.Invoke();
-            UIManager.Instance?.HidePauseMenu();
+            UIManager.Instance?.HidePauseMenu(); // Скрываем меню паузы
+
+            // Также скрываем настройки если они открыты
+            SettingsManager.Instance?.CloseSettings();
         }
 
         Debug.Log(isPaused ? "⏸ Игра на паузе" : "▶ Игра продолжена");
@@ -170,7 +171,6 @@ public class GameManager : MonoBehaviour
         }
 
         SaveSessionStats();
-        UnlockAchievement("CoreDestroyer");
 
         if (UIManager.Instance != null)
             UIManager.Instance.ShowVictoryScreen(sessionTimer, dataPacketsCollected, enemiesDestroyed);
@@ -183,9 +183,6 @@ public class GameManager : MonoBehaviour
     {
         dataPacketsCollected += value;
         OnDataPacketCollected?.Invoke();
-
-        if (dataPacketsCollected >= 50)
-            UnlockAchievement("DataCollector");
     }
 
     public void RegisterEnemyDestroyed()
@@ -226,38 +223,6 @@ public class GameManager : MonoBehaviour
     }
 
     // === СИСТЕМА ДОСТИЖЕНИЙ ===
-    void InitializeAchievements()
-    {
-        achievements.Add(new Achievement("FirstHack", "Первый взлом", "Используйте способность Взлом",
-            () => PlayerPrefs.GetInt("HacksUsed", 0) > 0));
-        achievements.Add(new Achievement("DataCollector", "Сборщик данных", "Соберите 50 пакетов данных",
-            () => dataPacketsCollected >= 50));
-        achievements.Add(new Achievement("CoreDestroyer", "Разрушитель Ядра", "Уничтожьте Центральное Ядро"));
-        achievements.Add(new Achievement("SpeedRunner", "Спидранер", "Пройдите игру менее чем за 25 минут",
-            () => sessionTimer <= 1500f));
-    }
-
-    void CheckAchievements()
-    {
-        foreach (var achievement in achievements)
-        {
-            if (!achievement.unlocked && achievement.CheckCondition())
-            {
-                UnlockAchievement(achievement.id);
-            }
-        }
-    }
-
-    public void UnlockAchievement(string achievementId)
-    {
-        var achievement = achievements.Find(a => a.id == achievementId);
-        if (achievement != null && !achievement.unlocked)
-        {
-            achievement.unlocked = true;
-            PlayerPrefs.SetInt($"Achievement_{achievementId}", 1);
-            UIManager.Instance?.ShowAchievementUnlocked(achievement.name, achievement.description);
-        }
-    }
 
     void InitializeHighScores()
     {

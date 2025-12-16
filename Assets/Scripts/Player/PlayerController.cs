@@ -1,4 +1,4 @@
-﻿﻿using UnityEngine;
+﻿using UnityEngine;
 using System.Collections;
 
 public class PlayerController : MonoBehaviour
@@ -7,6 +7,16 @@ public class PlayerController : MonoBehaviour
     public float moveSpeed = 8f;
     public float acceleration = 15f;
     public float deceleration = 20f;
+
+    [Header("=== ПРЫЖКИ ===")]
+    public float jumpForce = 12f;
+    public float jumpCooldown = 0.2f;
+    [SerializeField] private int _maxJumps = 1;
+    public LayerMask groundLayer = 1;
+    public float groundCheckRadius = 0.2f;
+    public Transform groundCheckPoint;
+
+    public int maxJumps => _maxJumps;
 
     [Header("=== СПОСОБНОСТИ ===")]
     public int maxHackCharges = 3;
@@ -21,6 +31,10 @@ public class PlayerController : MonoBehaviour
     public int health = 100;
     public bool isShieldActive = false;
     public bool canMove = true;
+    public int currentJumps = 0;
+    public bool isGrounded = false;
+    public bool jumpRequested = false;
+    public bool jumpKeyHeld = false;
 
     [Header("=== ВИЗУАЛЬНЫЕ ЭФФЕКТЫ ===")]
     public GameObject shieldEffect;
@@ -30,42 +44,59 @@ public class PlayerController : MonoBehaviour
     private Rigidbody2D rb;
     private Vector2 movement;
     private float currentHackCooldown = 0f;
+    private float jumpCooldownTimer = 0f;
     private SpriteRenderer spriteRenderer;
     private Animator animator;
     private Color originalColor;
+    private Collider2D playerCollider;
+    private bool wasGrounded = false;
+    private float lastTimeGrounded = 0f;
+    private float groundRememberTime = 0.15f;
 
     void Start()
     {
-        // Инициализация компонентов
         rb = GetComponent<Rigidbody2D>();
         spriteRenderer = GetComponent<SpriteRenderer>();
         animator = GetComponent<Animator>();
+        playerCollider = GetComponent<Collider2D>();
 
-        // Начальные значения
+        _maxJumps = 1;
+        currentJumps = 0;
+
+        if (groundCheckPoint == null)
+        {
+            GameObject groundCheckObj = new GameObject("GroundCheck");
+            groundCheckObj.transform.SetParent(transform);
+            groundCheckObj.transform.localPosition = new Vector3(0f, -0.5f, 0f);
+            groundCheckPoint = groundCheckObj.transform;
+        }
+
         currentHackCharges = maxHackCharges;
         currentShieldCharges = maxShieldCharges;
         originalColor = spriteRenderer.color;
 
-        Debug.Log("🎯 PlayerController инициализирован");
+        Debug.Log($"🎯 PlayerController инициализирован. Макс прыжков: {_maxJumps}");
     }
 
     void Update()
     {
-        // ПРОВЕРКА ПАУЗЫ И АКТИВНОСТИ ИГРЫ
         if (IsGamePaused()) return;
 
         HandleInput();
         UpdateCooldowns();
         UpdateVisuals();
+        CheckGrounded();
     }
 
     void FixedUpdate()
     {
         if (canMove && !IsGamePaused())
+        {
             HandleMovement();
+            HandleJump();
+        }
     }
 
-    // === ПРОВЕРКА СОСТОЯНИЯ ИГРЫ ===
     bool IsGamePaused()
     {
         return GameManager.Instance != null && (GameManager.Instance.isPaused || !GameManager.Instance.isGameActive);
@@ -73,13 +104,20 @@ public class PlayerController : MonoBehaviour
 
     void HandleInput()
     {
-        // Движение (требование: интуитивное управление)
         movement.x = Input.GetAxisRaw("Horizontal");
+        Debug.Log($"Input X: {movement.x}, Normalized: {movement.x}");
         movement.y = Input.GetAxisRaw("Vertical");
         movement = movement.normalized;
 
-        // Способности (требование: быстрый доступ)
-        if (Input.GetKeyDown(KeyCode.Space) && CanUseHack())
+        jumpKeyHeld = Input.GetKey(KeyCode.W) || Input.GetKey(KeyCode.Space);
+
+        if ((Input.GetKeyDown(KeyCode.W) || Input.GetKeyDown(KeyCode.Space)) && CanJump())
+        {
+            jumpRequested = true;
+        }
+
+        // Способности
+        if (Input.GetKeyDown(KeyCode.E) && CanUseHack())
         {
             UseHack();
         }
@@ -89,7 +127,7 @@ public class PlayerController : MonoBehaviour
             UseShield();
         }
 
-        // Тестовые команды (только если игра активна)
+        // Тестовые команды
         if (Input.GetKeyDown(KeyCode.T) && !IsGamePaused())
         {
             TakeDamage(10);
@@ -100,14 +138,135 @@ public class PlayerController : MonoBehaviour
     {
         if (movement.magnitude > 0.1f)
         {
-            // Плавное ускорение
-            rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, movement * moveSpeed, acceleration * Time.fixedDeltaTime);
+            Vector2 targetVelocity = new Vector2(movement.x * moveSpeed, rb.linearVelocity.y);
+            rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, targetVelocity, acceleration * Time.fixedDeltaTime);
         }
         else
         {
-            // Плавное замедление
-            rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, Vector2.zero, deceleration * Time.fixedDeltaTime);
+            Vector2 targetVelocity = new Vector2(0f, rb.linearVelocity.y);
+            rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, targetVelocity, deceleration * Time.fixedDeltaTime);
         }
+    }
+
+    void HandleJump()
+    {
+        if (jumpRequested)
+        {
+            rb.linearVelocity = new Vector2(rb.linearVelocity.x, jumpForce);
+            currentJumps++;
+            jumpCooldownTimer = jumpCooldown;
+            jumpRequested = false;
+
+            if (animator != null)
+                animator.SetTrigger("Jump");
+
+            Debug.Log($"Прыжок! Использовано прыжков: {currentJumps}/{_maxJumps}");
+        }
+    }
+
+    void CheckGrounded()
+    {
+        wasGrounded = isGrounded;
+
+        Collider2D[] groundColliders = Physics2D.OverlapCircleAll(groundCheckPoint.position, groundCheckRadius, groundLayer);
+
+        bool foundGround = false;
+        foreach (Collider2D collider in groundColliders)
+        {
+            if (collider != null && collider != playerCollider)
+            {
+                float colliderTop = collider.bounds.max.y;
+                float playerBottom = playerCollider.bounds.min.y;
+
+                if (playerBottom <= colliderTop + 0.1f && rb.linearVelocity.y <= 0.1f)
+                {
+                    foundGround = true;
+                    break;
+                }
+            }
+        }
+
+        isGrounded = foundGround;
+
+        if (isGrounded)
+        {
+            lastTimeGrounded = Time.time;
+        }
+
+        if (!wasGrounded && isGrounded)
+        {
+            OnLand();
+        }
+    }
+
+    void OnLand()
+    {
+        currentJumps = 0;
+        jumpCooldownTimer = 0f;
+
+        if (animator != null)
+            animator.SetTrigger("Land");
+
+        Debug.Log($"Приземление! Прыжки сброшены. CurrentJumps: {currentJumps}");
+
+        if (jumpKeyHeld && CanJump())
+        {
+            jumpRequested = true;
+            Debug.Log("Автоматический прыжок после приземления");
+        }
+    }
+
+    bool CanJump()
+    {
+        if (currentJumps >= _maxJumps)
+        {
+            return false;
+        }
+
+        bool recentlyGrounded = (Time.time - lastTimeGrounded) <= groundRememberTime;
+        bool hasJumpsLeft = currentJumps < _maxJumps;
+        bool cooldownOver = jumpCooldownTimer <= 0f;
+        bool canJump = hasJumpsLeft && cooldownOver && !IsGamePaused();
+
+        return canJump;
+    }
+
+    // === МЕТОДЫ ДЛЯ ВНЕШНЕГО ДОСТУПА ===
+    public void TakeDamage(int damage)
+    {
+        if (IsGamePaused()) return;
+
+        if (isShieldActive)
+        {
+            DeactivateShield();
+            Debug.Log("🛡 Щит поглотил урон!");
+            return;
+        }
+
+        health -= damage;
+
+        StartCoroutine(DamageFlash());
+
+        if (UIManager.Instance != null)
+            UIManager.Instance.UpdateHealthUI(health);
+
+        Debug.Log($"💔 Получен урон: {damage}. Здоровье: {health}");
+
+        if (health <= 0)
+        {
+            Die();
+        }
+    }
+
+    public void RestoreAbilityCharges(int amount)
+    {
+        currentHackCharges = Mathf.Min(currentHackCharges + amount, maxHackCharges);
+        currentShieldCharges = Mathf.Min(currentShieldCharges + amount, maxShieldCharges);
+
+        if (UIManager.Instance != null)
+            UIManager.Instance.UpdateAbilitiesUI(currentHackCharges, currentShieldCharges);
+
+        Debug.Log($"🔋 Восстановлены заряды способностей: +{amount}");
     }
 
     // === СИСТЕМА СПОСОБНОСТЕЙ ===
@@ -128,18 +287,15 @@ public class PlayerController : MonoBehaviour
         currentHackCharges--;
         currentHackCooldown = hackCooldown;
 
-        // Активация взлома через AbilityManager
         if (AbilityManager.Instance != null)
             AbilityManager.Instance.ActivateHack(hackDuration);
 
-        // Визуальные эффекты
         StartCoroutine(HackVisualEffect());
 
-        // Обновление UI
         if (UIManager.Instance != null)
             UIManager.Instance.UpdateAbilitiesUI(currentHackCharges, currentShieldCharges);
 
-        Debug.Log("⚡ Активирован Взлом!");
+        Debug.Log("Активирован Взлом!");
     }
 
     void UseShield()
@@ -149,18 +305,16 @@ public class PlayerController : MonoBehaviour
         currentShieldCharges--;
         isShieldActive = true;
 
-        // Визуальный эффект щита
         if (shieldEffect != null)
             shieldEffect.SetActive(true);
 
         spriteRenderer.color = new Color(0.3f, 0.8f, 1f, 0.8f);
 
-        // Обновление UI
         if (UIManager.Instance != null)
             UIManager.Instance.UpdateAbilitiesUI(currentHackCharges, currentShieldCharges);
 
         Invoke(nameof(DeactivateShield), shieldDuration);
-        Debug.Log("🛡️ Активирован Щит!");
+        Debug.Log("🛡 Активирован Щит!");
     }
 
     void DeactivateShield()
@@ -173,7 +327,6 @@ public class PlayerController : MonoBehaviour
 
     IEnumerator HackVisualEffect()
     {
-        // Неоновые импульсы при взломе
         if (hackEffect != null)
         {
             hackEffect.SetActive(true);
@@ -188,47 +341,32 @@ public class PlayerController : MonoBehaviour
         {
             currentHackCooldown -= Time.deltaTime;
         }
+
+        if (jumpCooldownTimer > 0)
+        {
+            jumpCooldownTimer -= Time.deltaTime;
+        }
     }
 
     void UpdateVisuals()
     {
-        // Анимация движения
-        if (animator != null)
-        {
-            animator.SetFloat("Speed", rb.linearVelocity.magnitude);
-            animator.SetFloat("Horizontal", movement.x);
-            animator.SetFloat("Vertical", movement.y);
-        }
-    }
+        if (animator == null) return;
 
-    // === СИСТЕМА ЗДОРОВЬЯ И УРОНА ===
-    public void TakeDamage(int damage)
-    {
-        if (IsGamePaused()) return;
+        float speed = Mathf.Abs(rb.linearVelocity.x);
+        float velX = rb.linearVelocity.x;
 
-        if (isShieldActive)
-        {
-            // Щит поглощает урон (требование: ровно один удар)
-            DeactivateShield();
-            Debug.Log("🛡️ Щит поглотил урон!");
-            return;
-        }
+        // Ключевая отладка - будет писать каждый кадр
+        Debug.Log($"Frame: {Time.frameCount}, VelX={velX:F4}, Speed={speed:F4}, InputX={movement.x}");
 
-        health -= damage;
+        // Только ОСНОВНЫЕ параметры
+        animator.SetFloat("Speed", speed);
+        animator.SetBool("IsGrounded", isGrounded);
 
-        // Визуальная обратная связь
-        StartCoroutine(DamageFlash());
-
-        // Обновление UI
-        if (UIManager.Instance != null)
-            UIManager.Instance.UpdateHealthUI(health);
-
-        Debug.Log($"💔 Получен урон: {damage}. Здоровье: {health}");
-
-        if (health <= 0)
-        {
-            Die();
-        }
+        // Поворот спрайта
+        if (movement.x > 0.1f)
+            spriteRenderer.flipX = false;
+        else if (movement.x < -0.1f)
+            spriteRenderer.flipX = true;
     }
 
     IEnumerator DamageFlash()
@@ -263,13 +401,10 @@ public class PlayerController : MonoBehaviour
 
     void CollectDataPacket(GameObject dataPacket)
     {
-        // Сбор пакета данных
         if (GameManager.Instance != null)
             GameManager.Instance.CollectDataPacket(1);
 
-        // Уничтожение объекта
         Destroy(dataPacket);
-
         Debug.Log("💾 Собран пакет данных!");
     }
 
@@ -280,20 +415,47 @@ public class PlayerController : MonoBehaviour
             GameManager.Instance.CompleteLevel();
     }
 
-    // === ВНЕШНИЙ ДОСТУП К СПОСОБНОСТЯМ ===
-    public void RestoreAbilityCharges(int amount)
+    // === ОБРАБОТКА СТОЛКНОВЕНИЙ ===
+    void OnCollisionEnter2D(Collision2D collision)
     {
-        currentHackCharges = Mathf.Min(currentHackCharges + amount, maxHackCharges);
-        currentShieldCharges = Mathf.Min(currentShieldCharges + amount, maxShieldCharges);
-
-        // Обновление UI
-        if (UIManager.Instance != null)
-            UIManager.Instance.UpdateAbilitiesUI(currentHackCharges, currentShieldCharges);
-
-        Debug.Log($"🔋 Восстановлены заряды способностей: +{amount}");
+        if (((1 << collision.gameObject.layer) & groundLayer) != 0)
+        {
+            foreach (ContactPoint2D contact in collision.contacts)
+            {
+                if (contact.normal.y > 0.7f)
+                {
+                    if (!isGrounded)
+                    {
+                        isGrounded = true;
+                        lastTimeGrounded = Time.time;
+                        OnLand();
+                    }
+                    break;
+                }
+            }
+        }
     }
 
-    // === МЕТОДЫ ДЛЯ ВНЕШНЕГО ДОСТУПА ===
+    void OnCollisionStay2D(Collision2D collision)
+    {
+        if (((1 << collision.gameObject.layer) & groundLayer) != 0)
+        {
+            foreach (ContactPoint2D contact in collision.contacts)
+            {
+                if (contact.normal.y > 0.7f)
+                {
+                    if (!isGrounded)
+                    {
+                        isGrounded = true;
+                        lastTimeGrounded = Time.time;
+                        OnLand();
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
     public Vector2 GetPosition()
     {
         return transform.position;
@@ -309,7 +471,6 @@ public class PlayerController : MonoBehaviour
         return 1f - (currentHackCooldown / hackCooldown);
     }
 
-    // === ОБРАБОТКА ПЕРЕЗАПУСКА ===
     public void ResetPlayer()
     {
         health = 100;
@@ -319,33 +480,47 @@ public class PlayerController : MonoBehaviour
         isShieldActive = false;
         canMove = true;
 
-        // Сброс визуальных эффектов
+        _maxJumps = 1;
+        currentJumps = 0;
+
+        isGrounded = false;
+        jumpRequested = false;
+        jumpCooldownTimer = 0f;
+        jumpKeyHeld = false;
+        wasGrounded = false;
+        lastTimeGrounded = 0f;
+
         if (shieldEffect != null)
             shieldEffect.SetActive(false);
         spriteRenderer.color = originalColor;
 
-        // Сброс физики
         if (rb != null)
         {
             rb.linearVelocity = Vector2.zero;
             rb.angularVelocity = 0f;
         }
 
-        // Обновление UI
         if (UIManager.Instance != null)
         {
             UIManager.Instance.UpdateHealthUI(health);
             UIManager.Instance.UpdateAbilitiesUI(currentHackCharges, currentShieldCharges);
         }
+
+        Debug.Log($"🔄 Игрок сброшен. Макс прыжков: {_maxJumps}");
     }
 
-    // === ОБРАБОТКА УНИЧТОЖЕНИЯ ===
+    void OnDrawGizmosSelected()
+    {
+        if (groundCheckPoint != null)
+        {
+            Gizmos.color = isGrounded ? Color.green : Color.red;
+            Gizmos.DrawWireSphere(groundCheckPoint.position, groundCheckRadius);
+        }
+    }
+
     void OnDestroy()
     {
-        // Отмена всех вызовов Invoke
         CancelInvoke();
-
-        // Остановка всех корутин
         StopAllCoroutines();
     }
 }
