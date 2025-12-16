@@ -7,6 +7,7 @@ public class PlayerController : MonoBehaviour
     public float moveSpeed = 8f;
     public float acceleration = 15f;
     public float deceleration = 20f;
+    public float crouchMoveSpeed = 4f;
 
     [Header("=== ПРЫЖКИ ===")]
     public float jumpForce = 12f;
@@ -17,6 +18,16 @@ public class PlayerController : MonoBehaviour
     public Transform groundCheckPoint;
 
     public int maxJumps => _maxJumps;
+
+    [Header("=== ПРИСЕДАНИЕ ===")]
+    public bool canCrouch = true;
+    public float crouchHeight = 0.8f; // ДОЛЖНО БЫТЬ МЕНЬШЕ originalHeight!
+    private float originalHeight;
+    public float crouchTransitionSpeed = 10f;
+    public bool canStandUp = true;
+    public float headCheckRadius = 0.3f;
+    public Transform headCheckPoint;
+    [Range(0f, 1f)] public float currentCrouchPercent = 0f;
 
     [Header("=== СПОСОБНОСТИ ===")]
     public int maxHackCharges = 3;
@@ -35,12 +46,13 @@ public class PlayerController : MonoBehaviour
     public bool isGrounded = false;
     public bool jumpRequested = false;
     public bool jumpKeyHeld = false;
+    public bool isCrouching = false;
+    public bool wantsToCrouch = false;
 
     [Header("=== ВИЗУАЛЬНЫЕ ЭФФЕКТЫ ===")]
     public GameObject shieldEffect;
     public GameObject hackEffect;
 
-    // Приватные переменные
     private Rigidbody2D rb;
     private Vector2 movement;
     private float currentHackCooldown = 0f;
@@ -52,6 +64,8 @@ public class PlayerController : MonoBehaviour
     private bool wasGrounded = false;
     private float lastTimeGrounded = 0f;
     private float groundRememberTime = 0.15f;
+    private float currentColliderHeight = 0f;
+    private Vector2[] originalPoints; // Для PolygonCollider2D
 
     void Start()
     {
@@ -60,8 +74,40 @@ public class PlayerController : MonoBehaviour
         animator = GetComponent<Animator>();
         playerCollider = GetComponent<Collider2D>();
 
-        _maxJumps = 1;
-        currentJumps = 0;
+        if (playerCollider is PolygonCollider2D polyCollider)
+        {
+            originalPoints = new Vector2[polyCollider.points.Length];
+            for (int i = 0; i < polyCollider.points.Length; i++)
+            {
+                originalPoints[i] = polyCollider.points[i];
+            }
+            originalHeight = GetPolygonHeight(polyCollider);
+            currentColliderHeight = originalHeight;
+        }
+        else if (playerCollider is BoxCollider2D boxCollider)
+        {
+            originalHeight = boxCollider.size.y;
+            currentColliderHeight = originalHeight;
+        }
+        else if (playerCollider is CapsuleCollider2D capsuleCollider)
+        {
+            originalHeight = capsuleCollider.size.y;
+            currentColliderHeight = originalHeight;
+        }
+        else
+        {
+            Debug.LogWarning("Используется неподдерживаемый тип коллайдера для приседания");
+            canCrouch = false;
+        }
+
+        if (headCheckPoint == null && canCrouch)
+        {
+            GameObject headCheckObj = new GameObject("HeadCheck");
+            headCheckObj.transform.SetParent(transform);
+            headCheckObj.transform.localPosition = Vector3.zero;
+            headCheckPoint = headCheckObj.transform;
+            UpdateHeadCheckPosition();
+        }
 
         if (groundCheckPoint == null)
         {
@@ -71,11 +117,13 @@ public class PlayerController : MonoBehaviour
             groundCheckPoint = groundCheckObj.transform;
         }
 
+        _maxJumps = 1;
+        currentJumps = 0;
         currentHackCharges = maxHackCharges;
         currentShieldCharges = maxShieldCharges;
         originalColor = spriteRenderer.color;
 
-        Debug.Log($"🎯 PlayerController инициализирован. Макс прыжков: {_maxJumps}");
+        Debug.Log($"🎯 PlayerController инициализирован. Исходная высота: {originalHeight}, Crouch: {crouchHeight}");
     }
 
     void Update()
@@ -86,6 +134,8 @@ public class PlayerController : MonoBehaviour
         UpdateCooldowns();
         UpdateVisuals();
         CheckGrounded();
+        CheckIfCanStandUp();
+        UpdateCrouchPercentage();
     }
 
     void FixedUpdate()
@@ -94,6 +144,35 @@ public class PlayerController : MonoBehaviour
         {
             HandleMovement();
             HandleJump();
+            HandleCrouch();
+        }
+    }
+
+    float GetPolygonHeight(PolygonCollider2D poly)
+    {
+        if (poly.points.Length == 0) return 0;
+        float minY = float.MaxValue;
+        float maxY = float.MinValue;
+        foreach (Vector2 point in poly.points)
+        {
+            minY = Mathf.Min(minY, point.y);
+            maxY = Mathf.Max(maxY, point.y);
+        }
+        return maxY - minY;
+    }
+
+    void UpdateCrouchPercentage()
+    {
+        if (!canCrouch || originalHeight == 0) return;
+        float heightDifference = originalHeight - crouchHeight;
+        if (heightDifference > 0)
+        {
+            float currentDifference = originalHeight - currentColliderHeight;
+            currentCrouchPercent = Mathf.Clamp01(currentDifference / heightDifference);
+        }
+        else
+        {
+            currentCrouchPercent = 0f;
         }
     }
 
@@ -105,46 +184,154 @@ public class PlayerController : MonoBehaviour
     void HandleInput()
     {
         movement.x = Input.GetAxisRaw("Horizontal");
-        Debug.Log($"Input X: {movement.x}, Normalized: {movement.x}");
-        movement.y = Input.GetAxisRaw("Vertical");
         movement = movement.normalized;
 
-        jumpKeyHeld = Input.GetKey(KeyCode.W) || Input.GetKey(KeyCode.Space);
-
-        if ((Input.GetKeyDown(KeyCode.W) || Input.GetKeyDown(KeyCode.Space)) && CanJump())
+        if (canCrouch)
         {
+            bool sKeyPressed = Input.GetKey(KeyCode.S);
+            bool downArrowPressed = Input.GetKey(KeyCode.DownArrow);
+            float verticalInput = Input.GetAxisRaw("Vertical");
+            bool downInput = verticalInput < -0.5f;
+            bool shouldCrouch = sKeyPressed || downArrowPressed || downInput;
+
+            if (shouldCrouch && !wantsToCrouch)
+            {
+                Debug.Log($"✅ Начало приседания (S: {sKeyPressed}, ↓: {downArrowPressed}, vertical: {verticalInput})");
+            }
+            else if (!shouldCrouch && wantsToCrouch)
+            {
+                Debug.Log("✅ Завершение приседания");
+            }
+
+            wantsToCrouch = shouldCrouch;
+        }
+
+        // Прыжок
+        jumpKeyHeld = Input.GetKey(KeyCode.W) || Input.GetKey(KeyCode.Space) || Input.GetKey(KeyCode.UpArrow);
+        if ((Input.GetKeyDown(KeyCode.W) || Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.UpArrow)) && CanJump())
+        {
+            if (isCrouching && canStandUp)
+            {
+                isCrouching = false;
+                Debug.Log("✅ Встали для прыжка");
+            }
             jumpRequested = true;
         }
 
         // Способности
-        if (Input.GetKeyDown(KeyCode.E) && CanUseHack())
-        {
-            UseHack();
-        }
+        if (Input.GetKeyDown(KeyCode.E) && CanUseHack()) UseHack();
+        if (Input.GetKeyDown(KeyCode.LeftShift) && CanUseShield()) UseShield();
 
-        if (Input.GetKeyDown(KeyCode.LeftShift) && CanUseShield())
-        {
-            UseShield();
-        }
-
-        // Тестовые команды
-        if (Input.GetKeyDown(KeyCode.T) && !IsGamePaused())
-        {
-            TakeDamage(10);
-        }
+        // Отладка
+        if (Input.GetKeyDown(KeyCode.F1)) Debug.Log($"Crouch: {isCrouching}, Wants: {wantsToCrouch}, Height: {currentColliderHeight:F2}");
+        if (Input.GetKeyDown(KeyCode.T)) TakeDamage(10);
+        if (Input.GetKeyDown(KeyCode.P)) { wantsToCrouch = true; isCrouching = true; }
+        if (Input.GetKeyDown(KeyCode.O)) { isCrouching = !isCrouching; wantsToCrouch = isCrouching; }
     }
 
     void HandleMovement()
     {
+        float currentMoveSpeed = isCrouching ? crouchMoveSpeed : moveSpeed;
         if (movement.magnitude > 0.1f)
         {
-            Vector2 targetVelocity = new Vector2(movement.x * moveSpeed, rb.linearVelocity.y);
+            Vector2 targetVelocity = new Vector2(movement.x * currentMoveSpeed, rb.linearVelocity.y);
             rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, targetVelocity, acceleration * Time.fixedDeltaTime);
         }
         else
         {
             Vector2 targetVelocity = new Vector2(0f, rb.linearVelocity.y);
             rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, targetVelocity, deceleration * Time.fixedDeltaTime);
+        }
+    }
+
+    void HandleCrouch()
+    {
+        if (!canCrouch) return;
+
+        bool canActuallyCrouch = true;
+        if (wantsToCrouch && !isCrouching)
+        {
+            Collider2D[] groundColliders = Physics2D.OverlapCircleAll(groundCheckPoint.position, groundCheckRadius * 1.5f, groundLayer);
+            if (groundColliders.Length == 0) canActuallyCrouch = false;
+        }
+
+        if (wantsToCrouch && !isCrouching && canActuallyCrouch)
+        {
+            isCrouching = true;
+        }
+        else if (!wantsToCrouch && isCrouching && canStandUp)
+        {
+            isCrouching = false;
+        }
+
+        UpdateColliderHeight();
+    }
+
+    void CheckIfCanStandUp()
+    {
+        if (!canCrouch || !isCrouching || headCheckPoint == null) return;
+
+        Collider2D[] overhead = Physics2D.OverlapCircleAll(headCheckPoint.position, headCheckRadius, groundLayer);
+        canStandUp = true;
+        foreach (Collider2D col in overhead)
+        {
+            if (col != null && col != playerCollider)
+            {
+                canStandUp = false;
+                break;
+            }
+        }
+    }
+
+    void UpdateHeadCheckPosition()
+    {
+        if (headCheckPoint != null) headCheckPoint.localPosition = new Vector3(0f, currentColliderHeight * 0.5f, 0f);
+    }
+
+    void UpdateColliderHeight()
+    {
+        if (!canCrouch) return;
+        float targetHeight = isCrouching ? crouchHeight : originalHeight;
+
+        if (playerCollider is PolygonCollider2D polyCollider && originalPoints != null)
+        {
+            float originalMinY = float.MaxValue;
+            foreach (Vector2 p in originalPoints) originalMinY = Mathf.Min(originalMinY, p.y);
+            float scaleY = originalHeight > 0 ? targetHeight / originalHeight : 1f;
+            scaleY = Mathf.Clamp01(scaleY);
+
+            Vector2[] newPoints = new Vector2[originalPoints.Length];
+            for (int i = 0; i < originalPoints.Length; i++)
+            {
+                Vector2 p = originalPoints[i];
+                float newY = originalMinY + (p.y - originalMinY) * scaleY;
+                newPoints[i] = new Vector2(p.x, newY);
+            }
+            polyCollider.points = newPoints;
+            currentColliderHeight = GetPolygonHeight(polyCollider);
+            UpdateHeadCheckPosition();
+        }
+        else if (playerCollider is BoxCollider2D box)
+        {
+            Vector2 size = box.size;
+            float newH = Mathf.Lerp(size.y, targetHeight, crouchTransitionSpeed * Time.fixedDeltaTime);
+            newH = Mathf.Clamp(newH, Mathf.Min(crouchHeight, originalHeight), Mathf.Max(crouchHeight, originalHeight));
+            float bottom = transform.position.y + box.offset.y - size.y * 0.5f;
+            box.size = new Vector2(size.x, newH);
+            box.offset = new Vector2(box.offset.x, bottom - transform.position.y + newH * 0.5f);
+            currentColliderHeight = newH;
+            UpdateHeadCheckPosition();
+        }
+        else if (playerCollider is CapsuleCollider2D cap)
+        {
+            Vector2 size = cap.size;
+            float newH = Mathf.Lerp(size.y, targetHeight, crouchTransitionSpeed * Time.fixedDeltaTime);
+            newH = Mathf.Clamp(newH, Mathf.Min(crouchHeight, originalHeight), Mathf.Max(crouchHeight, originalHeight));
+            float bottom = transform.position.y + cap.offset.y - size.y * 0.5f;
+            cap.size = new Vector2(size.x, newH);
+            cap.offset = new Vector2(cap.offset.x, bottom - transform.position.y + newH * 0.5f);
+            currentColliderHeight = newH;
+            UpdateHeadCheckPosition();
         }
     }
 
@@ -156,106 +343,44 @@ public class PlayerController : MonoBehaviour
             currentJumps++;
             jumpCooldownTimer = jumpCooldown;
             jumpRequested = false;
-
-            if (animator != null)
-                animator.SetTrigger("Jump");
-
-            Debug.Log($"Прыжок! Использовано прыжков: {currentJumps}/{_maxJumps}");
+            if (animator != null) animator.SetTrigger("Jump");
         }
     }
 
     void CheckGrounded()
     {
         wasGrounded = isGrounded;
-
-        Collider2D[] groundColliders = Physics2D.OverlapCircleAll(groundCheckPoint.position, groundCheckRadius, groundLayer);
-
-        bool foundGround = false;
-        foreach (Collider2D collider in groundColliders)
+        Collider2D[] colliders = Physics2D.OverlapCircleAll(groundCheckPoint.position, groundCheckRadius, groundLayer);
+        isGrounded = false;
+        foreach (Collider2D col in colliders)
         {
-            if (collider != null && collider != playerCollider)
+            if (col != playerCollider)
             {
-                float colliderTop = collider.bounds.max.y;
+                float colliderTop = col.bounds.max.y;
                 float playerBottom = playerCollider.bounds.min.y;
-
                 if (playerBottom <= colliderTop + 0.1f && rb.linearVelocity.y <= 0.1f)
                 {
-                    foundGround = true;
+                    isGrounded = true;
                     break;
                 }
             }
         }
-
-        isGrounded = foundGround;
-
-        if (isGrounded)
-        {
-            lastTimeGrounded = Time.time;
-        }
-
-        if (!wasGrounded && isGrounded)
-        {
-            OnLand();
-        }
+        if (isGrounded) lastTimeGrounded = Time.time;
+        if (!wasGrounded && isGrounded) OnLand();
     }
 
     void OnLand()
     {
         currentJumps = 0;
         jumpCooldownTimer = 0f;
-
-        if (animator != null)
-            animator.SetTrigger("Land");
-
-        Debug.Log($"Приземление! Прыжки сброшены. CurrentJumps: {currentJumps}");
-
-        if (jumpKeyHeld && CanJump())
-        {
-            jumpRequested = true;
-            Debug.Log("Автоматический прыжок после приземления");
-        }
+        if (animator != null) animator.SetTrigger("Land");
+        if (jumpKeyHeld && CanJump()) jumpRequested = true;
     }
 
     bool CanJump()
     {
-        if (currentJumps >= _maxJumps)
-        {
-            return false;
-        }
-
-        bool recentlyGrounded = (Time.time - lastTimeGrounded) <= groundRememberTime;
-        bool hasJumpsLeft = currentJumps < _maxJumps;
-        bool cooldownOver = jumpCooldownTimer <= 0f;
-        bool canJump = hasJumpsLeft && cooldownOver && !IsGamePaused();
-
-        return canJump;
-    }
-
-    // === МЕТОДЫ ДЛЯ ВНЕШНЕГО ДОСТУПА ===
-    public void TakeDamage(int damage)
-    {
-        if (IsGamePaused()) return;
-
-        if (isShieldActive)
-        {
-            DeactivateShield();
-            Debug.Log("🛡 Щит поглотил урон!");
-            return;
-        }
-
-        health -= damage;
-
-        StartCoroutine(DamageFlash());
-
-        if (UIManager.Instance != null)
-            UIManager.Instance.UpdateHealthUI(health);
-
-        Debug.Log($"💔 Получен урон: {damage}. Здоровье: {health}");
-
-        if (health <= 0)
-        {
-            Die();
-        }
+        if (currentJumps >= _maxJumps || jumpCooldownTimer > 0f || IsGamePaused()) return false;
+        return currentJumps < _maxJumps && (isGrounded || (Time.time - lastTimeGrounded) <= groundRememberTime);
     }
 
     public void RestoreAbilityCharges(int amount)
@@ -269,59 +394,42 @@ public class PlayerController : MonoBehaviour
         Debug.Log($"🔋 Восстановлены заряды способностей: +{amount}");
     }
 
-    // === СИСТЕМА СПОСОБНОСТЕЙ ===
-    bool CanUseHack()
+    public void TakeDamage(int damage)
     {
-        return currentHackCharges > 0 && currentHackCooldown <= 0 && !IsGamePaused();
+        if (IsGamePaused()) return;
+        if (isShieldActive) { DeactivateShield(); return; }
+        health -= damage;
+        StartCoroutine(DamageFlash());
+        UIManager.Instance?.UpdateHealthUI(health);
+        if (health <= 0) Die();
     }
 
-    bool CanUseShield()
-    {
-        return currentShieldCharges > 0 && !isShieldActive && !IsGamePaused();
-    }
+    bool CanUseHack() => currentHackCharges > 0 && currentHackCooldown <= 0 && !IsGamePaused();
+    bool CanUseShield() => currentShieldCharges > 0 && !isShieldActive && !IsGamePaused();
 
     void UseHack()
     {
-        if (IsGamePaused()) return;
-
         currentHackCharges--;
         currentHackCooldown = hackCooldown;
-
-        if (AbilityManager.Instance != null)
-            AbilityManager.Instance.ActivateHack(hackDuration);
-
+        AbilityManager.Instance?.ActivateHack(hackDuration);
         StartCoroutine(HackVisualEffect());
-
-        if (UIManager.Instance != null)
-            UIManager.Instance.UpdateAbilitiesUI(currentHackCharges, currentShieldCharges);
-
-        Debug.Log("Активирован Взлом!");
+        UIManager.Instance?.UpdateAbilitiesUI(currentHackCharges, currentShieldCharges);
     }
 
     void UseShield()
     {
-        if (IsGamePaused()) return;
-
         currentShieldCharges--;
         isShieldActive = true;
-
-        if (shieldEffect != null)
-            shieldEffect.SetActive(true);
-
+        if (shieldEffect != null) shieldEffect.SetActive(true);
         spriteRenderer.color = new Color(0.3f, 0.8f, 1f, 0.8f);
-
-        if (UIManager.Instance != null)
-            UIManager.Instance.UpdateAbilitiesUI(currentHackCharges, currentShieldCharges);
-
+        UIManager.Instance?.UpdateAbilitiesUI(currentHackCharges, currentShieldCharges);
         Invoke(nameof(DeactivateShield), shieldDuration);
-        Debug.Log("🛡 Активирован Щит!");
     }
 
     void DeactivateShield()
     {
         isShieldActive = false;
-        if (shieldEffect != null)
-            shieldEffect.SetActive(false);
+        if (shieldEffect != null) shieldEffect.SetActive(false);
         spriteRenderer.color = originalColor;
     }
 
@@ -337,36 +445,19 @@ public class PlayerController : MonoBehaviour
 
     void UpdateCooldowns()
     {
-        if (currentHackCooldown > 0)
-        {
-            currentHackCooldown -= Time.deltaTime;
-        }
-
-        if (jumpCooldownTimer > 0)
-        {
-            jumpCooldownTimer -= Time.deltaTime;
-        }
+        if (currentHackCooldown > 0) currentHackCooldown -= Time.deltaTime;
+        if (jumpCooldownTimer > 0) jumpCooldownTimer -= Time.deltaTime;
     }
 
     void UpdateVisuals()
     {
         if (animator == null) return;
-
         float speed = Mathf.Abs(rb.linearVelocity.x);
-        float velX = rb.linearVelocity.x;
-
-        // Ключевая отладка - будет писать каждый кадр
-        Debug.Log($"Frame: {Time.frameCount}, VelX={velX:F4}, Speed={speed:F4}, InputX={movement.x}");
-
-        // Только ОСНОВНЫЕ параметры
         animator.SetFloat("Speed", speed);
         animator.SetBool("IsGrounded", isGrounded);
-
-        // Поворот спрайта
-        if (movement.x > 0.1f)
-            spriteRenderer.flipX = false;
-        else if (movement.x < -0.1f)
-            spriteRenderer.flipX = true;
+        animator.SetBool("IsCrouching", isCrouching); // ← КЛЮЧЕВОЙ ПАРАМЕТР ДЛЯ ANIMATOR
+        if (movement.x > 0.1f) spriteRenderer.flipX = false;
+        else if (movement.x < -0.1f) spriteRenderer.flipX = true;
     }
 
     IEnumerator DamageFlash()
@@ -379,48 +470,36 @@ public class PlayerController : MonoBehaviour
     void Die()
     {
         Debug.Log("💀 Игрок погиб!");
-        if (GameManager.Instance != null)
-            GameManager.Instance.PlayerDied();
+        GameManager.Instance?.PlayerDied();
     }
 
-    // === СИСТЕМА СБОРА ДАННЫХ ===
     void OnTriggerEnter2D(Collider2D other)
     {
         if (IsGamePaused()) return;
-
-        if (other.CompareTag("DataPacket"))
-        {
-            CollectDataPacket(other.gameObject);
-        }
-
-        if (other.CompareTag("Exit"))
-        {
-            CompleteLevel();
-        }
+        if (other.CompareTag("DataPacket")) CollectDataPacket(other.gameObject);
+        if (other.CompareTag("Exit")) CompleteLevel();
     }
 
     void CollectDataPacket(GameObject dataPacket)
     {
-        if (GameManager.Instance != null)
-            GameManager.Instance.CollectDataPacket(1);
-
+        GameManager.Instance?.CollectDataPacket(1);
         Destroy(dataPacket);
-        Debug.Log("💾 Собран пакет данных!");
     }
 
     void CompleteLevel()
     {
-        Debug.Log($"🎉 Уровень {GameManager.Instance.currentLevel} пройден!");
-        if (GameManager.Instance != null)
-            GameManager.Instance.CompleteLevel();
+        Debug.Log($"🎉 Уровень {GameManager.Instance?.currentLevel} пройден!");
+        GameManager.Instance?.CompleteLevel();
     }
 
-    // === ОБРАБОТКА СТОЛКНОВЕНИЙ ===
-    void OnCollisionEnter2D(Collision2D collision)
+    void OnCollisionEnter2D(Collision2D collision) => CheckGroundOnCollision(collision);
+    void OnCollisionStay2D(Collision2D collision) => CheckGroundOnCollision(collision);
+
+    void CheckGroundOnCollision(Collision2D col)
     {
-        if (((1 << collision.gameObject.layer) & groundLayer) != 0)
+        if (((1 << col.gameObject.layer) & groundLayer) != 0)
         {
-            foreach (ContactPoint2D contact in collision.contacts)
+            foreach (ContactPoint2D contact in col.contacts)
             {
                 if (contact.normal.y > 0.7f)
                 {
@@ -436,40 +515,9 @@ public class PlayerController : MonoBehaviour
         }
     }
 
-    void OnCollisionStay2D(Collision2D collision)
-    {
-        if (((1 << collision.gameObject.layer) & groundLayer) != 0)
-        {
-            foreach (ContactPoint2D contact in collision.contacts)
-            {
-                if (contact.normal.y > 0.7f)
-                {
-                    if (!isGrounded)
-                    {
-                        isGrounded = true;
-                        lastTimeGrounded = Time.time;
-                        OnLand();
-                    }
-                    break;
-                }
-            }
-        }
-    }
-
-    public Vector2 GetPosition()
-    {
-        return transform.position;
-    }
-
-    public bool IsAlive()
-    {
-        return health > 0;
-    }
-
-    public float GetHackCooldownProgress()
-    {
-        return 1f - (currentHackCooldown / hackCooldown);
-    }
+    public Vector2 GetPosition() => transform.position;
+    public bool IsAlive() => health > 0;
+    public float GetHackCooldownProgress() => 1f - (currentHackCooldown / hackCooldown);
 
     public void ResetPlayer()
     {
@@ -479,34 +527,45 @@ public class PlayerController : MonoBehaviour
         currentHackCooldown = 0f;
         isShieldActive = false;
         canMove = true;
-
         _maxJumps = 1;
         currentJumps = 0;
-
         isGrounded = false;
+        isCrouching = false;
+        wantsToCrouch = false;
+        currentCrouchPercent = 0f;
         jumpRequested = false;
         jumpCooldownTimer = 0f;
         jumpKeyHeld = false;
         wasGrounded = false;
         lastTimeGrounded = 0f;
 
-        if (shieldEffect != null)
-            shieldEffect.SetActive(false);
+        if (canCrouch)
+        {
+            if (playerCollider is PolygonCollider2D poly && originalPoints != null)
+            {
+                poly.points = originalPoints;
+                currentColliderHeight = originalHeight;
+                UpdateHeadCheckPosition();
+            }
+            else if (playerCollider is BoxCollider2D box)
+            {
+                box.size = new Vector2(box.size.x, originalHeight);
+                currentColliderHeight = originalHeight;
+                UpdateHeadCheckPosition();
+            }
+            else if (playerCollider is CapsuleCollider2D cap)
+            {
+                cap.size = new Vector2(cap.size.x, originalHeight);
+                currentColliderHeight = originalHeight;
+                UpdateHeadCheckPosition();
+            }
+        }
+
+        if (shieldEffect != null) shieldEffect.SetActive(false);
         spriteRenderer.color = originalColor;
-
-        if (rb != null)
-        {
-            rb.linearVelocity = Vector2.zero;
-            rb.angularVelocity = 0f;
-        }
-
-        if (UIManager.Instance != null)
-        {
-            UIManager.Instance.UpdateHealthUI(health);
-            UIManager.Instance.UpdateAbilitiesUI(currentHackCharges, currentShieldCharges);
-        }
-
-        Debug.Log($"🔄 Игрок сброшен. Макс прыжков: {_maxJumps}");
+        if (rb != null) { rb.linearVelocity = Vector2.zero; rb.angularVelocity = 0f; }
+        UIManager.Instance?.UpdateHealthUI(health);
+        UIManager.Instance?.UpdateAbilitiesUI(currentHackCharges, currentShieldCharges);
     }
 
     void OnDrawGizmosSelected()
@@ -516,11 +575,10 @@ public class PlayerController : MonoBehaviour
             Gizmos.color = isGrounded ? Color.green : Color.red;
             Gizmos.DrawWireSphere(groundCheckPoint.position, groundCheckRadius);
         }
-    }
-
-    void OnDestroy()
-    {
-        CancelInvoke();
-        StopAllCoroutines();
+        if (headCheckPoint != null && canCrouch)
+        {
+            Gizmos.color = canStandUp ? Color.blue : Color.yellow;
+            Gizmos.DrawWireSphere(headCheckPoint.position, headCheckRadius);
+        }
     }
 }
