@@ -12,6 +12,7 @@ public class UIManager : MonoBehaviour
     public TextMeshProUGUI hackChargesText;
     public TextMeshProUGUI shieldChargesText;
     public TextMeshProUGUI dataPacketsText;
+    public TextMeshProUGUI coinsText;
     public TextMeshProUGUI timerText;
     public TextMeshProUGUI levelText;
 
@@ -45,6 +46,28 @@ public class UIManager : MonoBehaviour
 
     private PlayerController player;
     private GameManager gameManager;
+
+    public class Coin : MonoBehaviour
+    {
+        public int value = 1;
+        void OnTriggerEnter2D(Collider2D other)
+        {
+            if (other.CompareTag("Player"))
+            {
+                GameManager.Instance?.CollectCoin(value);
+                Destroy(gameObject);
+            }
+        }
+    }
+
+    public void UpdateCoinsUI(int coins)
+    {
+        if (coinsText != null)
+        {
+            coinsText.text = $"МОНЕТ: {coins}";
+            coinsText.color = neonYellow; // или любой цвет по желанию
+        }
+    }
 
     void Awake()
     {

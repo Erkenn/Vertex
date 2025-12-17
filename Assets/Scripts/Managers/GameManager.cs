@@ -17,11 +17,14 @@ public class GameManager : MonoBehaviour
     public int currentLevel = 1;
     public float sessionTimer = 0f;
     public bool isGameActive = true;
-    public bool isPaused = false; // ДОБАВЛЕНО ПОЛЕ
+    public bool isPaused = false;
+
+    [Header("=== СБОР ПРЕДМЕТОВ ===")]
+    public int dataPacketsCollected = 0;
+    public int coinsCollected = 0; // ← МОНЕТЫ ДОБАВЛЕНЫ
+    public int enemiesDestroyed = 0;
 
     [Header("=== СТАТИСТИКА И РЕКОРДЫ ===")]
-    public int dataPacketsCollected = 0;
-    public int enemiesDestroyed = 0;
     public float bestCompletionTime = Mathf.Infinity;
     public int totalSessionsPlayed = 0;
 
@@ -35,6 +38,7 @@ public class GameManager : MonoBehaviour
     public System.Action OnLevelComplete;
     public System.Action OnDataPacketCollected;
     public System.Action OnEnemyDestroyed;
+    public System.Action OnCoinCollected; // ← Опционально, для будущего
 
     void Awake()
     {
@@ -86,15 +90,13 @@ public class GameManager : MonoBehaviour
         if (isPaused)
         {
             OnGamePause?.Invoke();
-            UIManager.Instance?.ShowPauseMenu(); // Показываем меню паузы
+            UIManager.Instance?.ShowPauseMenu();
             AutoSaveProgress();
         }
         else
         {
             OnGameResume?.Invoke();
-            UIManager.Instance?.HidePauseMenu(); // Скрываем меню паузы
-
-            // Также скрываем настройки если они открыты
+            UIManager.Instance?.HidePauseMenu();
             SettingsManager.Instance?.CloseSettings();
         }
 
@@ -185,6 +187,26 @@ public class GameManager : MonoBehaviour
         OnDataPacketCollected?.Invoke();
     }
 
+    // === СИСТЕМА МОНЕТ ===
+    public void CollectCoin(int value = 1)
+    {
+        coinsCollected += value;
+        Debug.Log($"💰 Монета подобрана! Всего: {coinsCollected}");
+        OnCoinCollected?.Invoke();
+
+        // Обновляем UI
+        if (UIManager.Instance != null)
+        {
+            UIManager.Instance.UpdateCoinsUI(coinsCollected);
+        }
+
+        if (autoSaveEnabled)
+        {
+            PlayerPrefs.SetInt("CoinsCollected", coinsCollected);
+            PlayerPrefs.Save();
+        }
+    }
+
     public void RegisterEnemyDestroyed()
     {
         enemiesDestroyed++;
@@ -198,6 +220,7 @@ public class GameManager : MonoBehaviour
         PlayerPrefs.SetInt("CurrentLives", currentLives);
         PlayerPrefs.SetFloat("SessionTimer", sessionTimer);
         PlayerPrefs.SetInt("DataPackets", dataPacketsCollected);
+        PlayerPrefs.SetInt("CoinsCollected", coinsCollected); // ← СОХРАНЯЕМ МОНЕТЫ
         PlayerPrefs.Save();
     }
 
@@ -207,6 +230,7 @@ public class GameManager : MonoBehaviour
         currentLives = PlayerPrefs.GetInt("CurrentLives", totalLives);
         sessionTimer = PlayerPrefs.GetFloat("SessionTimer", 0f);
         dataPacketsCollected = PlayerPrefs.GetInt("DataPackets", 0);
+        coinsCollected = PlayerPrefs.GetInt("CoinsCollected", 0); // ← ЗАГРУЖАЕМ МОНЕТЫ
         bestCompletionTime = PlayerPrefs.GetFloat("BestCompletionTime", Mathf.Infinity);
     }
 
@@ -214,16 +238,17 @@ public class GameManager : MonoBehaviour
     {
         int totalPlayTime = PlayerPrefs.GetInt("TotalPlayTime", 0) + (int)sessionTimer;
         int totalDataPackets = PlayerPrefs.GetInt("TotalDataPackets", 0) + dataPacketsCollected;
+        int totalCoins = PlayerPrefs.GetInt("TotalCoins", 0) + coinsCollected; // ← ОБЩИЕ МОНЕТЫ
         int totalEnemies = PlayerPrefs.GetInt("TotalEnemies", 0) + enemiesDestroyed;
 
         PlayerPrefs.SetInt("TotalPlayTime", totalPlayTime);
         PlayerPrefs.SetInt("TotalDataPackets", totalDataPackets);
+        PlayerPrefs.SetInt("TotalCoins", totalCoins);
         PlayerPrefs.SetInt("TotalEnemies", totalEnemies);
         PlayerPrefs.Save();
     }
 
     // === СИСТЕМА ДОСТИЖЕНИЙ ===
-
     void InitializeHighScores()
     {
         if (!PlayerPrefs.HasKey("HighScoresInitialized"))
@@ -248,6 +273,7 @@ public class GameManager : MonoBehaviour
         currentLives = totalLives;
         sessionTimer = 0f;
         dataPacketsCollected = 0;
+        coinsCollected = 0; // ← СБРАСЫВАЕМ МОНЕТЫ
         enemiesDestroyed = 0;
         isGameActive = true;
         isPaused = false;
