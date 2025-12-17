@@ -59,7 +59,13 @@ public class GameManager : MonoBehaviour
     {
         currentLives = totalLives;
         sessionTimer = 0f;
-        LoadAllPlayerData();
+
+        // LoadAllPlayerData();
+
+        currentLevel = 1;
+        coinsCollected = 0;
+        dataPacketsCollected = 0;
+
         InitializeHighScores();
     }
 
@@ -106,19 +112,23 @@ public class GameManager : MonoBehaviour
     // === СИСТЕМА УРОВНЕЙ ===
     public void LoadLevel(int levelIndex)
     {
-        if (levelIndex >= 1 && levelIndex <= 5)
-        {
-            currentLevel = levelIndex;
-            SceneManager.LoadScene($"Level_{levelIndex}");
+        Debug.Log($"🔍 LoadLevel вызван с levelIndex={levelIndex}, currentLevel до = {currentLevel}");
 
-            if (autoSaveEnabled)
-                AutoSaveProgress();
-        }
+        // Сбрасываем данные уровня
+        dataPacketsCollected = 0;
+        coinsCollected = 0;
+        enemiesDestroyed = 0;
+
+        currentLevel = levelIndex; // Устанавливаем НОВЫЙ уровень
+
+        Debug.Log($"🔄 Сброс данных: монеты = {coinsCollected}, currentLevel = {currentLevel}");
+
+        SceneManager.LoadScene($"Level_{levelIndex}");
     }
 
     public void CompleteLevel()
     {
-        OnLevelComplete?.Invoke();
+        Debug.Log($"✅ CompleteLevel вызван. Текущий уровень: {currentLevel}");
 
         if (currentLevel < 5)
         {
@@ -193,6 +203,8 @@ public class GameManager : MonoBehaviour
         coinsCollected += value;
         Debug.Log($"💰 Монета подобрана! Всего: {coinsCollected}");
         OnCoinCollected?.Invoke();
+
+        Debug.Log($"UIManager.Instance = {(UIManager.Instance != null ? "OK" : "NULL!")}");
 
         // Обновляем UI
         if (UIManager.Instance != null)
@@ -269,12 +281,16 @@ public class GameManager : MonoBehaviour
 
     public void StartNewGame()
     {
+        PlayerPrefs.DeleteKey("CurrentLevel");
+        PlayerPrefs.DeleteKey("CoinsCollected");
+        PlayerPrefs.DeleteKey("DataPackets");
+
         currentLevel = 1;
         currentLives = totalLives;
-        sessionTimer = 0f;
+        coinsCollected = 0;
         dataPacketsCollected = 0;
-        coinsCollected = 0; // ← СБРАСЫВАЕМ МОНЕТЫ
         enemiesDestroyed = 0;
+        sessionTimer = 0f;
         isGameActive = true;
         isPaused = false;
 

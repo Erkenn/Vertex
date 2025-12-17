@@ -6,6 +6,7 @@ TagManager:
   tags:
   - DataPacket
   - Exit
+  - Coin
   layers:
   - Default
   - TransparentFX

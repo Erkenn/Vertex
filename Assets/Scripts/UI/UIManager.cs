@@ -12,14 +12,20 @@ public class UIManager : MonoBehaviour
     public TextMeshProUGUI hackChargesText;
     public TextMeshProUGUI shieldChargesText;
     public TextMeshProUGUI dataPacketsText;
-    public TextMeshProUGUI coinsText;
     public TextMeshProUGUI timerText;
     public TextMeshProUGUI levelText;
+    public Image shieldIcon;
+    public TextMeshProUGUI shieldCountText;
+    public Image hackIcon;
+    public TextMeshProUGUI hackCountText;
+    public Image coinIcon;
+    public TextMeshProUGUI coinCountText;
 
     [Header("=== ИНДИКАТОРЫ СПОСОБНОСТЕЙ ===")]
     public Image hackCooldownOverlay;
     public Image shieldActiveIndicator;
     public Slider healthBar;
+
 
     [Header("=== МЕНЮ И ЭКРАНЫ ===")]
     public GameObject pauseMenu;
@@ -62,11 +68,8 @@ public class UIManager : MonoBehaviour
 
     public void UpdateCoinsUI(int coins)
     {
-        if (coinsText != null)
-        {
-            coinsText.text = $"МОНЕТ: {coins}";
-            coinsText.color = neonYellow; // или любой цвет по желанию
-        }
+        if (coinCountText != null)
+            coinCountText.text = coins.ToString();
     }
 
     void Awake()
@@ -115,6 +118,8 @@ public class UIManager : MonoBehaviour
         if (victoryMenu != null) victoryMenu.SetActive(false);
         if (hudPanel != null) hudPanel.SetActive(true);
         if (pauseMenuPanel != null) pauseMenuPanel.SetActive(false);
+        if (gameManager != null)
+            UpdateCoinsUI(gameManager.coinsCollected);
 
         UpdateHealthUI(100);
         UpdateAbilitiesUI(3, 2);
@@ -167,36 +172,27 @@ public class UIManager : MonoBehaviour
 
     public void UpdateHealthUI(int currentHealth)
     {
-        if (healthText != null)
-        {
-            healthText.text = $"ЗДОРОВЬЕ: {currentHealth}%";
-            healthText.color = GetHealthColor(currentHealth);
-        }
-
         if (healthBar != null)
         {
             healthBar.value = currentHealth / 100f;
 
-            if (healthAnimator != null && currentHealth < 100)
-            {
-                healthAnimator.Play("HealthPulse");
-            }
+            if (currentHealth > 70) healthBar.fillRect.GetComponent<Image>().color = neonGreen;
+            else if (currentHealth > 30) healthBar.fillRect.GetComponent<Image>().color = neonYellow;
+            else healthBar.fillRect.GetComponent<Image>().color = neonRed;
         }
     }
 
     public void UpdateAbilitiesUI(int hackCharges, int shieldCharges)
     {
-        if (hackChargesText != null)
-        {
-            hackChargesText.text = $"ВЗЛОМ: {hackCharges}";
-            hackChargesText.color = hackCharges > 0 ? neonBlue : neonRed;
-        }
+        if (shieldCountText != null)
+            shieldCountText.text = shieldCharges.ToString();
+        if (hackCountText != null)
+            hackCountText.text = hackCharges.ToString();
 
-        if (shieldChargesText != null)
-        {
-            shieldChargesText.text = $"ЩИТ: {shieldCharges}";
-            shieldChargesText.color = shieldCharges > 0 ? neonYellow : neonRed;
-        }
+        if (shieldIcon != null)
+            shieldIcon.color = shieldCharges > 0 ? Color.white : new Color(1, 1, 1, 0.3f);
+        if (hackIcon != null)
+            hackIcon.color = hackCharges > 0 ? Color.white : new Color(1, 1, 1, 0.3f);
     }
 
     public void UpdateDataPacketsUI(int packets)

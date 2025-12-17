@@ -219,8 +219,15 @@ public class PlayerController : MonoBehaviour
         }
 
         // Способности
-        if (Input.GetKeyDown(KeyCode.E) && CanUseHack()) UseHack();
-        if (Input.GetKeyDown(KeyCode.LeftShift) && CanUseShield()) UseShield();
+        if (Input.GetKeyDown(KeyCode.P) && CanUseHack())
+        {
+            UseHack();
+        }
+
+        if (Input.GetKeyDown(KeyCode.O) && CanUseShield())
+        {
+            UseShield();
+        }
 
         // Отладка
         if (Input.GetKeyDown(KeyCode.F1)) Debug.Log($"Crouch: {isCrouching}, Wants: {wantsToCrouch}, Height: {currentColliderHeight:F2}");
@@ -409,21 +416,38 @@ public class PlayerController : MonoBehaviour
 
     void UseHack()
     {
+        if (IsGamePaused()) return;
+
         currentHackCharges--;
         currentHackCooldown = hackCooldown;
-        AbilityManager.Instance?.ActivateHack(hackDuration);
+
+        // АКТИВИРУЕМ ВЗЛОМ ЧЕРЕЗ AbilityManager
+        if (AbilityManager.Instance != null)
+            AbilityManager.Instance.ActivateHack(hackDuration);
+
         StartCoroutine(HackVisualEffect());
         UIManager.Instance?.UpdateAbilitiesUI(currentHackCharges, currentShieldCharges);
+        Debug.Log("Активирован Взлом!");
     }
 
     void UseShield()
     {
+        if (IsGamePaused()) return;
+
         currentShieldCharges--;
         isShieldActive = true;
-        if (shieldEffect != null) shieldEffect.SetActive(true);
+
+        // АКТИВИРУЕМ ЩИТ В AbilityManager
+        if (AbilityManager.Instance != null)
+            AbilityManager.Instance.ActivateShield(gameObject);
+
+        if (shieldEffect != null)
+            shieldEffect.SetActive(true);
+
         spriteRenderer.color = new Color(0.3f, 0.8f, 1f, 0.8f);
         UIManager.Instance?.UpdateAbilitiesUI(currentHackCharges, currentShieldCharges);
         Invoke(nameof(DeactivateShield), shieldDuration);
+        Debug.Log("🛡 Активирован Щит!");
     }
 
     void DeactivateShield()
@@ -455,9 +479,16 @@ public class PlayerController : MonoBehaviour
         float speed = Mathf.Abs(rb.linearVelocity.x);
         animator.SetFloat("Speed", speed);
         animator.SetBool("IsGrounded", isGrounded);
-        animator.SetBool("IsCrouching", isCrouching); // ← КЛЮЧЕВОЙ ПАРАМЕТР ДЛЯ ANIMATOR
+        animator.SetBool("IsCrouching", isCrouching); 
         if (movement.x > 0.1f) spriteRenderer.flipX = false;
         else if (movement.x < -0.1f) spriteRenderer.flipX = true;
+
+        // === ОБНОВЛЕНИЕ UI СПОСОБНОСТЕЙ ===
+        if (UIManager.Instance != null)
+        {
+            UIManager.Instance.UpdateHealthUI(health);
+            UIManager.Instance.UpdateAbilitiesUI(currentHackCharges, currentShieldCharges);
+        }
     }
 
     IEnumerator DamageFlash()
@@ -475,21 +506,26 @@ public class PlayerController : MonoBehaviour
 
     void OnTriggerEnter2D(Collider2D other)
     {
-        if (IsGamePaused()) return;
-        if (other.CompareTag("DataPacket")) CollectDataPacket(other.gameObject);
-        if (other.CompareTag("Exit")) CompleteLevel();
+        if (other.CompareTag("DataPacket"))
+        {
+            CollectDataPacket(other.gameObject);
+        }
+
+        if (other.CompareTag("Exit"))
+        {
+            GameManager.Instance?.CompleteLevel();
+        }
+
+        if (other.CompareTag("Coin"))
+        {
+            GameManager.Instance?.CollectCoin(1);
+        }
     }
 
     void CollectDataPacket(GameObject dataPacket)
     {
         GameManager.Instance?.CollectDataPacket(1);
         Destroy(dataPacket);
-    }
-
-    void CompleteLevel()
-    {
-        Debug.Log($"🎉 Уровень {GameManager.Instance?.currentLevel} пройден!");
-        GameManager.Instance?.CompleteLevel();
     }
 
     void OnCollisionEnter2D(Collision2D collision) => CheckGroundOnCollision(collision);
