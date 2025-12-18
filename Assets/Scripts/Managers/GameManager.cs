@@ -8,7 +8,7 @@ public class GameManager : MonoBehaviour
     public static GameManager Instance;
 
     [Header("=== ИГРОВЫЕ НАСТРОЙКИ ===")]
-    public int totalLives = 3;
+    public int totalLives = 1;
     public float estimatedPlaytime = 1800f;
     public bool autoSaveEnabled = true;
 
@@ -112,17 +112,18 @@ public class GameManager : MonoBehaviour
     // === СИСТЕМА УРОВНЕЙ ===
     public void LoadLevel(int levelIndex)
     {
-        Debug.Log($"🔍 LoadLevel вызван с levelIndex={levelIndex}, currentLevel до = {currentLevel}");
+        // Уничтожаем всех врагов
+        Enemy[] enemies = FindObjectsOfType<Enemy>();
+        foreach (var enemy in enemies)
+            if (enemy != null) Destroy(enemy.gameObject);
 
         // Сбрасываем данные уровня
-        dataPacketsCollected = 0;
         coinsCollected = 0;
+        dataPacketsCollected = 0;
         enemiesDestroyed = 0;
+        currentLevel = levelIndex;
 
-        currentLevel = levelIndex; // Устанавливаем НОВЫЙ уровень
-
-        Debug.Log($"🔄 Сброс данных: монеты = {coinsCollected}, currentLevel = {currentLevel}");
-
+        // Загружаем сцену
         SceneManager.LoadScene($"Level_{levelIndex}");
     }
 
@@ -140,28 +141,125 @@ public class GameManager : MonoBehaviour
         }
     }
 
+
     // === СИСТЕМА ЖИЗНЕЙ ===
     public void PlayerDied()
     {
-        currentLives--;
+        Debug.Log("🔥 PlayerDied: показ экрана смерти и перезапуск");
 
-        if (currentLives <= 0)
+        // 1. Останавливаем всю игру
+        isGameActive = false;
+
+        // 2. Останавливаем время
+        Time.timeScale = 0f;
+
+        // 3. НЕМЕДЛЕННО останавливаем всех врагов
+        StopAllEnemiesImmediately();
+
+        // 4. Показываем экран смерти
+        if (UIManager.Instance != null)
         {
-            GameOver("Потеряны все жизни");
+            UIManager.Instance.ShowDeathScreen();
         }
-        else
-        {
-            StartCoroutine(QuickRestartLevel());
-        }
+
+        // 5. Запускаем перезапуск уровня через 1.5 секунды
+        StartCoroutine(RestartLevelAfterDelay(1.5f));
     }
 
-    IEnumerator QuickRestartLevel()
+    private IEnumerator RestartLevelAfterDelay(float delay)
     {
-        UIManager.Instance?.ShowDeathScreen();
-        yield return new WaitForSeconds(1.5f);
-        UIManager.Instance?.HideDeathScreen();
-        LoadLevel(currentLevel);
+        // Ждем в реальном времени (не зависит от Time.timeScale)
+        yield return new WaitForSecondsRealtime(delay);
+
+        // Восстанавливаем время
+        Time.timeScale = 1f;
+
+        // Размораживаем врагов (они будут уничтожены при загрузке сцены)
+        StopAllEnemiesImmediately();
+
+        // Уничтожаем всех врагов
+        var enemies = FindObjectsOfType<Enemy>();
+        foreach (var e in enemies)
+            if (e != null) Destroy(e.gameObject);
+
+        // Сбрасываем данные уровня
+        coinsCollected = 0;
+        dataPacketsCollected = 0;
+        enemiesDestroyed = 0;
+
+        // Скрываем экран смерти
+        if (UIManager.Instance != null)
+        {
+            UIManager.Instance.HideDeathScreen();
+        }
+
+        // Перезапускаем ТЕКУЩИЙ уровень
+        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+
+        // Восстанавливаем состояние игры
+        isGameActive = true;
     }
+
+    private void StopAllEnemiesImmediately()
+    {
+        Enemy[] enemies = FindObjectsOfType<Enemy>();
+        foreach (Enemy enemy in enemies)
+        {
+            if (enemy != null)
+            {
+                // Полностью останавливаем врага
+                enemy.StopEnemy();
+            }
+        }
+
+        // Также останавливаем любые другие движущиеся объекты
+        GameObject[] movingObjects = GameObject.FindGameObjectsWithTag("Enemy");
+        foreach (GameObject obj in movingObjects)
+        {
+            Rigidbody2D rb = obj.GetComponent<Rigidbody2D>();
+            if (rb != null)
+            {
+                rb.linearVelocity = Vector2.zero;
+                rb.simulated = false;
+            }
+        }
+
+        Debug.Log("❌ Все враги остановлены");
+    }
+
+    private void FreezeAllEnemies(bool freeze)
+    {
+        Enemy[] enemies = FindObjectsOfType<Enemy>();
+        foreach (Enemy enemy in enemies)
+        {
+            if (enemy != null)
+            {
+                // Отключаем/включаем скрипт врага
+                enemy.enabled = !freeze;
+
+                // Отключаем/включаем Rigidbody
+                Rigidbody2D enemyRb = enemy.GetComponent<Rigidbody2D>();
+                if (enemyRb != null)
+                {
+                    enemyRb.simulated = !freeze;
+                    if (freeze)
+                    {
+                        enemyRb.linearVelocity = Vector2.zero; // Останавливаем движение
+                    }
+                }
+
+                // Если есть аниматор, останавливаем/возобновляем анимации
+                Animator enemyAnimator = enemy.GetComponent<Animator>();
+                if (enemyAnimator != null)
+                {
+                    enemyAnimator.enabled = !freeze;
+                }
+            }
+        }
+
+        Debug.Log(freeze ? "❄ Все враги заморожены" : "✅ Враги разморожены");
+    }
+
 
     void GameOver(string reason)
     {

@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿/*
+using UnityEngine;
 
 public class Guardian : Enemy
 {
@@ -30,7 +31,7 @@ public class Guardian : Enemy
         // Плавный поворот к игроку
         if (direction.x != 0 && spriteRenderer != null)
         {
-            spriteRenderer.flipX = direction.x < 0;
+            spriteRenderer.flipX = direction.x > 0;
         }
 
         // Анимация преследования
@@ -73,3 +74,4 @@ public class Guardian : Enemy
         }
     }
 }
+*/

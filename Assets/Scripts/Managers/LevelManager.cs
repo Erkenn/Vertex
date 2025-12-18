@@ -23,6 +23,7 @@ public class LevelManager : MonoBehaviour
 
     private int currentLevelIndex = 0;
     private bool isLevelCompleted = false;
+    private float levelStartTime;
 
     void Awake()
     {
@@ -117,6 +118,7 @@ public class LevelManager : MonoBehaviour
     {
         if (scene.name.StartsWith("Level_"))
         {
+            levelStartTime = Time.time; // Начинаем отсчет времени уровня
             StartLevel(currentLevelIndex);
         }
     }
@@ -146,32 +148,43 @@ public class LevelManager : MonoBehaviour
     {
         ActivateEnemyTypes(config);
         SetupLevelEnvironment(config);
+
+        // Настройка спавнера
+        EnemySpawner spawner = FindObjectOfType<EnemySpawner>();
+        if (spawner != null)
+        {
+            spawner.ConfigureSpawner(config);
+        }
     }
 
     void ActivateEnemyTypes(LevelConfig config)
     {
+        // Если нет спавнера, активируем врагов вручную
         GameObject[] enemies = GameObject.FindGameObjectsWithTag("Enemy");
         foreach (GameObject enemyObj in enemies)
         {
             Enemy enemy = enemyObj.GetComponent<Enemy>();
             if (enemy != null)
             {
+                bool shouldBeActive = true;
+
                 if (enemy is Scanner && !config.hasScanners)
                 {
-                    enemyObj.SetActive(false);
+                    shouldBeActive = false;
                 }
-                else if (enemy is Guardian && !config.hasGuardians)
+                // else if (enemy.GetType().Name.Contains("Guardian") && !config.hasGuardians)
+                // {
+                //     shouldBeActive = false;
+                // }
+                // else if (enemy.GetType().Name.Contains("Turret") && !config.hasTurrets)
+                // {
+                //     shouldBeActive = false;
+                // }
+
+                enemyObj.SetActive(shouldBeActive);
+                if (enemy != null)
                 {
-                    enemyObj.SetActive(false);
-                }
-                else if (enemy is Turret && !config.hasTurrets)
-                {
-                    enemyObj.SetActive(false);
-                }
-                else
-                {
-                    enemyObj.SetActive(true);
-                    enemy.isActive = true;
+                    enemy.isActive = shouldBeActive;
                 }
             }
         }
@@ -180,13 +193,12 @@ public class LevelManager : MonoBehaviour
     void SetupLevelEnvironment(LevelConfig config)
     {
         SetupLighting(config);
-        SetupBackground(config);
+        // SetupBackground(config); // Закомментировано, так как метод пустой
     }
 
     void SetupLighting(LevelConfig config)
     {
-        // ИСПРАВЛЕННЫЙ КОД - замена устаревшего метода
-        Light mainLight = FindFirstObjectByType<Light>(); // ЗАМЕНА FindObjectOfType
+        Light mainLight = FindAnyObjectByType<Light>(); // Современный метод поиска
 
         if (mainLight != null)
         {
@@ -200,22 +212,23 @@ public class LevelManager : MonoBehaviour
         }
     }
 
-    void SetupBackground(LevelConfig config)
-    {
-        // Настройка фона
-    }
-
     public void CompleteLevel()
     {
         if (isLevelCompleted) return;
 
         isLevelCompleted = true;
         LevelConfig config = levels[currentLevelIndex];
+        float levelTime = Time.time - levelStartTime;
 
         Debug.Log($"🎉 Уровень '{config.levelName}' пройден!");
-
-        float levelTime = Time.timeSinceLevelLoad;
         Debug.Log($"⏱️ Время прохождения: {levelTime:F1} сек");
+
+        // Останавливаем спавнер
+        EnemySpawner spawner = FindObjectOfType<EnemySpawner>();
+        if (spawner != null)
+        {
+            spawner.StopSpawning();
+        }
 
         if (currentLevelIndex < levels.Length - 1)
         {
@@ -231,6 +244,7 @@ public class LevelManager : MonoBehaviour
     IEnumerator LoadNextLevelWithDelay(float delay)
     {
         yield return new WaitForSeconds(delay);
+
         LoadLevel(currentLevelIndex + 1);
     }
 

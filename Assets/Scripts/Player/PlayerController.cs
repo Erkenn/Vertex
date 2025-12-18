@@ -32,9 +32,9 @@ public class PlayerController : MonoBehaviour
     [Header("=== СПОСОБНОСТИ ===")]
     public int maxHackCharges = 3;
     public int maxShieldCharges = 2;
-    public float hackCooldown = 5f;
+    public float hackCooldown = 7f;
     public float shieldDuration = 3f;
-    public float hackDuration = 3f;
+    public float hackDuration = 5.5f;
 
     [Header("=== ТЕКУЩЕЕ СОСТОЯНИЕ ===")]
     public int currentHackCharges;
@@ -65,7 +65,8 @@ public class PlayerController : MonoBehaviour
     private float lastTimeGrounded = 0f;
     private float groundRememberTime = 0.15f;
     private float currentColliderHeight = 0f;
-    private Vector2[] originalPoints; // Для PolygonCollider2D
+    private Vector2[] originalPoints;
+    private bool alreadyDied = false;
 
     void Start()
     {
@@ -192,11 +193,12 @@ public class PlayerController : MonoBehaviour
             bool downArrowPressed = Input.GetKey(KeyCode.DownArrow);
             float verticalInput = Input.GetAxisRaw("Vertical");
             bool downInput = verticalInput < -0.5f;
+
             bool shouldCrouch = sKeyPressed || downArrowPressed || downInput;
 
             if (shouldCrouch && !wantsToCrouch)
             {
-                Debug.Log($"✅ Начало приседания (S: {sKeyPressed}, ↓: {downArrowPressed}, vertical: {verticalInput})");
+                Debug.Log("✅ Начало приседания");
             }
             else if (!shouldCrouch && wantsToCrouch)
             {
@@ -224,16 +226,9 @@ public class PlayerController : MonoBehaviour
             UseHack();
         }
 
-        if (Input.GetKeyDown(KeyCode.O) && CanUseShield())
-        {
-            UseShield();
-        }
-
         // Отладка
         if (Input.GetKeyDown(KeyCode.F1)) Debug.Log($"Crouch: {isCrouching}, Wants: {wantsToCrouch}, Height: {currentColliderHeight:F2}");
         if (Input.GetKeyDown(KeyCode.T)) TakeDamage(10);
-        if (Input.GetKeyDown(KeyCode.P)) { wantsToCrouch = true; isCrouching = true; }
-        if (Input.GetKeyDown(KeyCode.O)) { isCrouching = !isCrouching; wantsToCrouch = isCrouching; }
     }
 
     void HandleMovement()
@@ -255,20 +250,23 @@ public class PlayerController : MonoBehaviour
     {
         if (!canCrouch) return;
 
-        bool canActuallyCrouch = true;
+        // Простая логика: хочет присесть → приседает, не хочет → встаёт
         if (wantsToCrouch && !isCrouching)
         {
-            Collider2D[] groundColliders = Physics2D.OverlapCircleAll(groundCheckPoint.position, groundCheckRadius * 1.5f, groundLayer);
-            if (groundColliders.Length == 0) canActuallyCrouch = false;
-        }
-
-        if (wantsToCrouch && !isCrouching && canActuallyCrouch)
-        {
             isCrouching = true;
+            Debug.Log("✅ Начато приседание");
         }
-        else if (!wantsToCrouch && isCrouching && canStandUp)
+        else if (!wantsToCrouch && isCrouching)
         {
-            isCrouching = false;
+            if (canStandUp)
+            {
+                isCrouching = false;
+                Debug.Log("✅ Вставание");
+            }
+            else
+            {
+                Debug.Log("❌ Нельзя встать — над головой препятствие");
+            }
         }
 
         UpdateColliderHeight();
@@ -403,12 +401,31 @@ public class PlayerController : MonoBehaviour
 
     public void TakeDamage(int damage)
     {
-        if (IsGamePaused()) return;
-        if (isShieldActive) { DeactivateShield(); return; }
+        if (IsGamePaused() || alreadyDied) return; // ← ДОБАВЛЕНО: не принимаем урон если уже умерли
+
+        if (isShieldActive)
+        {
+            DeactivateShield();
+            Debug.Log("🛡 Щит поглотил урон!");
+            return;
+        }
+
         health -= damage;
+
+        // Защита от отрицательного здоровья
+        if (health < 0) health = 0;
+
         StartCoroutine(DamageFlash());
-        UIManager.Instance?.UpdateHealthUI(health);
-        if (health <= 0) Die();
+
+        if (UIManager.Instance != null)
+            UIManager.Instance.UpdateHealthUI(health);
+
+        Debug.Log($"💔 Получен урон: {damage}. Здоровье: {health}");
+
+        if (health <= 0)
+        {
+            Die();
+        }
     }
 
     bool CanUseHack() => currentHackCharges > 0 && currentHackCooldown <= 0 && !IsGamePaused();
@@ -418,37 +435,22 @@ public class PlayerController : MonoBehaviour
     {
         if (IsGamePaused()) return;
 
+        // Тратим заряд
         currentHackCharges--;
+
+        // Запускаем взлом
+        if (AbilityManager.Instance != null)
+            AbilityManager.Instance.ActivateHack();
+
+        // Обновляем UI
+        UIManager.Instance?.UpdateAbilitiesUI(currentHackCharges, currentShieldCharges);
+
+        // Устанавливаем кулдаун
         currentHackCooldown = hackCooldown;
 
-        // АКТИВИРУЕМ ВЗЛОМ ЧЕРЕЗ AbilityManager
-        if (AbilityManager.Instance != null)
-            AbilityManager.Instance.ActivateHack(hackDuration);
-
-        StartCoroutine(HackVisualEffect());
-        UIManager.Instance?.UpdateAbilitiesUI(currentHackCharges, currentShieldCharges);
         Debug.Log("Активирован Взлом!");
     }
 
-    void UseShield()
-    {
-        if (IsGamePaused()) return;
-
-        currentShieldCharges--;
-        isShieldActive = true;
-
-        // АКТИВИРУЕМ ЩИТ В AbilityManager
-        if (AbilityManager.Instance != null)
-            AbilityManager.Instance.ActivateShield(gameObject);
-
-        if (shieldEffect != null)
-            shieldEffect.SetActive(true);
-
-        spriteRenderer.color = new Color(0.3f, 0.8f, 1f, 0.8f);
-        UIManager.Instance?.UpdateAbilitiesUI(currentHackCharges, currentShieldCharges);
-        Invoke(nameof(DeactivateShield), shieldDuration);
-        Debug.Log("🛡 Активирован Щит!");
-    }
 
     void DeactivateShield()
     {
@@ -501,8 +503,56 @@ public class PlayerController : MonoBehaviour
     void Die()
     {
         Debug.Log("💀 Игрок погиб!");
-        GameManager.Instance?.PlayerDied();
+
+        if (alreadyDied) return;
+        alreadyDied = true;
+
+        // 1. Останавливаем игрока
+        canMove = false;
+
+        // 2. Отключаем физику
+        if (rb != null)
+        {
+            rb.linearVelocity = Vector2.zero;
+            rb.simulated = false;
+        }
+
+        // 3. Просто меняем состояние аниматора (без триггеров)
+        if (animator != null)
+        {
+            // Если есть параметр "IsAlive", устанавливаем его в false
+            bool hasIsAlive = false;
+            foreach (AnimatorControllerParameter param in animator.parameters)
+            {
+                if (param.name == "IsAlive" && param.type == AnimatorControllerParameterType.Bool)
+                {
+                    hasIsAlive = true;
+                    break;
+                }
+            }
+
+            if (hasIsAlive)
+            {
+                animator.SetBool("IsAlive", false);
+            }
+            else
+            {
+                // Просто проигрываем анимацию по имени
+                animator.Play("Death"); // Или "Die", "Dead" - в зависимости от ваших анимаций
+            }
+        }
+
+        // 4. Отключаем коллайдер
+        if (playerCollider != null)
+            playerCollider.enabled = false;
+
+        // 5. Вызываем GameManager
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.PlayerDied();
+        }
     }
+
 
     void OnTriggerEnter2D(Collider2D other)
     {
@@ -557,6 +607,7 @@ public class PlayerController : MonoBehaviour
 
     public void ResetPlayer()
     {
+        alreadyDied = false;
         health = 100;
         currentHackCharges = maxHackCharges;
         currentShieldCharges = maxShieldCharges;
@@ -574,6 +625,7 @@ public class PlayerController : MonoBehaviour
         jumpKeyHeld = false;
         wasGrounded = false;
         lastTimeGrounded = 0f;
+
 
         if (canCrouch)
         {

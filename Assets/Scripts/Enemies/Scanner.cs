@@ -2,92 +2,152 @@
 
 public class Scanner : Enemy
 {
-    [Header("=== НАСТРОЙКИ СКАНЕРА ===")]
+    [Header("=== ПАТРУЛИРОВАНИЕ ===")]
     public Transform[] patrolPoints;
-    public float waitTimeAtPoints = 2f;
+    public float waitTime = 1f;
 
-    private int currentPatrolIndex = 0;
-    private bool isMoving = true;
+    [Header("=== СКАНИРОВАНИЕ ===")]
+    public float scanDistance = 10f;
+    public LayerMask playerLayer;
+
+    private int currentPoint = 0;
+    private bool isWaiting = false;
     private float waitTimer = 0f;
+    private bool hasKilledPlayer = false;
 
     protected override void Start()
     {
         base.Start();
 
+        // Проверка точек патрулирования
         if (patrolPoints == null || patrolPoints.Length == 0)
         {
-            Debug.LogWarning($"Scanner {gameObject.name} не имеет точек патрулирования!");
+            Debug.LogError($"Scanner {name} не имеет точек патрулирования!");
+            enabled = false;
+            return;
         }
+
+        // Ориентация в начальную точку
+        transform.position = patrolPoints[0].position;
     }
 
-    protected override void PatrolBehavior()
+    protected override void CustomBehavior()
     {
-        if (patrolPoints == null || patrolPoints.Length == 0) return;
+        PatrolMovement();
+        ScanForPlayer();
+    }
 
-        if (isMoving)
+    private void PatrolMovement()
+    {
+        if (isWaiting)
         {
-            Transform targetPoint = patrolPoints[currentPatrolIndex];
-            Vector2 direction = (targetPoint.position - transform.position).normalized;
-
-            // Движение к точке
-            if (rb != null)
-                rb.linearVelocity = direction * moveSpeed;
-
-            // Поворот спрайта
-            if (spriteRenderer != null && direction.x != 0)
-            {
-                spriteRenderer.flipX = direction.x < 0;
-            }
-
-            // Проверка достижения точки
-            if (Vector2.Distance(transform.position, targetPoint.position) < 0.1f)
-            {
-                isMoving = false;
-                waitTimer = waitTimeAtPoints;
-
-                if (rb != null)
-                    rb.linearVelocity = Vector2.zero;
-            }
-        }
-        else
-        {
-            // Ожидание на точке
             waitTimer -= Time.deltaTime;
             if (waitTimer <= 0)
             {
-                isMoving = true;
-                currentPatrolIndex = (currentPatrolIndex + 1) % patrolPoints.Length;
+                isWaiting = false;
+                currentPoint = (currentPoint + 1) % patrolPoints.Length;
             }
+            return;
         }
-    }
 
-    protected override void ChaseBehavior(float distanceToPlayer)
-    {
-        if (player == null) return;
+        // Движение к текущей точке
+        Vector2 targetPosition = patrolPoints[currentPoint].position;
+        Vector2 direction = (targetPosition - (Vector2)transform.position).normalized;
 
-        Vector2 direction = (player.position - transform.position).normalized;
-
-        // Движение к игроку
+        // Передвижение
         if (rb != null)
-            rb.linearVelocity = direction * moveSpeed * 1.5f; // Быстрее при преследовании
+            rb.linearVelocity = direction * moveSpeed;
 
-        // Поворот спрайта
-        if (spriteRenderer != null && direction.x != 0)
+        // Поворот спрайта в зависимости от направления
+        if (spriteRenderer != null)
         {
-            spriteRenderer.flipX = direction.x < 0;
+            spriteRenderer.flipX = direction.x > 0; // Если движемся вправо - флипаем
         }
 
-        // Атака при близком расстоянии
-        if (distanceToPlayer <= attackRange)
+        // Проверка достижения точки
+        if (Vector2.Distance(transform.position, targetPosition) < 0.1f)
         {
+            isWaiting = true;
+            waitTimer = waitTime;
             if (rb != null)
                 rb.linearVelocity = Vector2.zero;
         }
     }
 
-    protected override void StartChasing()
+    private void ScanForPlayer()
     {
-        base.StartChasing();
-        Debug.Log($"🛰️ Сканер {gameObject.name} обнаружил игрока!");
+        if (hasKilledPlayer || player == null) return;
+
+        // Направление сканирования: влево или вправо в зависимости от ориентации
+        Vector2 scanDirection = spriteRenderer.flipX ? Vector2.right : Vector2.left;
+
+        // Луч под 45 градусов вниз
+        Vector2 angledDirection = new Vector2(scanDirection.x, -1f).normalized;
+
+        // Начальная точка луча (немного смещенная от центра)
+        Vector2 scanOrigin = (Vector2)transform.position + new Vector2(scanDirection.x * 0.5f, -0.3f);
+
+        // Отладочный луч
+        Debug.DrawRay(scanOrigin, angledDirection * scanDistance, Color.cyan);
+
+        // Проверка столкновения
+        RaycastHit2D hit = Physics2D.Raycast(scanOrigin, angledDirection, scanDistance, playerLayer);
+
+        if (hit.collider != null && hit.collider.CompareTag("Player"))
+        {
+            KillPlayer();
+            hasKilledPlayer = true;
+        }
+    }
+
+    private void KillPlayer()
+    {
+        PlayerController playerController = player.GetComponent<PlayerController>();
+        if (playerController != null && playerController.IsAlive())
+        {
+            // Мгновенная смерть
+            playerController.TakeDamage(1000);
+            Debug.Log($"Scanner {name} убил игрока");
+        }
+    }
+
+    protected override void RecoverFromStun()
+    {
+        base.RecoverFromStun();
+        // Сбрасываем статус убийства, чтобы можно было убить снова после пробуждения
+        hasKilledPlayer = false;
+    }
+
+    private void OnDrawGizmosSelected()
+    {
+        // Рисуем точки патрулирования
+        if (patrolPoints != null)
+        {
+            for (int i = 0; i < patrolPoints.Length; i++)
+            {
+                Gizmos.color = Color.green;
+                Gizmos.DrawSphere(patrolPoints[i].position, 0.3f);
+
+                // Соединяем точки линиями
+                if (i < patrolPoints.Length - 1)
+                {
+                    Gizmos.DrawLine(patrolPoints[i].position, patrolPoints[i + 1].position);
+                }
+                // Замыкаем цикл
+                else if (patrolPoints.Length > 1)
+                {
+                    Gizmos.DrawLine(patrolPoints[i].position, patrolPoints[0].position);
+                }
+            }
+        }
+
+        // Рисуем зону сканирования
+        if (Application.isPlaying && spriteRenderer != null)
+        {
+            Vector2 scanDirection = spriteRenderer.flipX ? Vector2.right : Vector2.left;
+            Vector2 angledDirection = new Vector2(scanDirection.x, -1f).normalized;
+            Gizmos.color = Color.cyan;
+            Gizmos.DrawLine(transform.position, (Vector2)transform.position + angledDirection * scanDistance);
+        }
     }
 }

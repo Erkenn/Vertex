@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿/*
+using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
 
@@ -362,3 +363,4 @@ public class CoreBoss : Enemy
         Debug.Log($"⚡ Специальный взлом! Ядро уязвимо на {duration} секунд!");
     }
 }
+*/

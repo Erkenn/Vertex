@@ -18,6 +18,7 @@ public class UIManager : MonoBehaviour
     public TextMeshProUGUI shieldCountText;
     public Image hackIcon;
     public TextMeshProUGUI hackCountText;
+    public GameObject deathScreen;
     public Image coinIcon;
     public TextMeshProUGUI coinCountText;
 
@@ -52,6 +53,23 @@ public class UIManager : MonoBehaviour
 
     private PlayerController player;
     private GameManager gameManager;
+
+    public void ShowDeathScreen()
+    {
+        if (deathScreen != null)
+        {
+            deathScreen.SetActive(true);
+            Debug.Log("💀 Экран смерти показан");
+        }
+    }
+
+    public void HideDeathScreen()
+    {
+        if (deathScreen != null)
+        {
+            deathScreen.SetActive(false);
+        }
+    }
 
     public class Coin : MonoBehaviour
     {
@@ -327,16 +345,6 @@ public class UIManager : MonoBehaviour
     {
         Debug.Log($"🏆 ДОСТИЖЕНИЕ: {name} - {description}");
         yield return new WaitForSeconds(2f);
-    }
-
-    public void ShowDeathScreen()
-    {
-        Debug.Log("💀 Показан экран смерти");
-    }
-
-    public void HideDeathScreen()
-    {
-        Debug.Log("💀 Скрыт экран смерти");
     }
 
     private Color GetHealthColor(int health)

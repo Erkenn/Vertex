@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿/*
+using UnityEngine;
 using System.Collections;
 
 public class Turret : Enemy
@@ -107,3 +108,4 @@ public class Turret : Enemy
         }
     }
 }
+*/

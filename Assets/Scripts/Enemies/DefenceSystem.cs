@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿/*
+using UnityEngine;
 
 public class DefenseSystem : Enemy
 {
@@ -69,3 +70,4 @@ public class DefenseSystem : Enemy
         }
     }
 }
+*/

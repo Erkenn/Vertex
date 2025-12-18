@@ -8,8 +8,8 @@ public class EnemySpawner : MonoBehaviour
 
     [Header("=== ПРЕФАБЫ ВРАГОВ ===")]
     public GameObject scannerPrefab;
-    public GameObject guardianPrefab;
-    public GameObject turretPrefab;
+    // public GameObject guardianPrefab; // Закомментируйте, если нет таких врагов
+    // public GameObject turretPrefab;   // Закомментируйте, если нет таких врагов
 
     [Header("=== НАСТРОЙКИ СПАВНА ===")]
     public Transform[] spawnAreas;
@@ -41,6 +41,12 @@ public class EnemySpawner : MonoBehaviour
 
     public void ConfigureSpawner(LevelManager.LevelConfig config)
     {
+        if (config == null)
+        {
+            Debug.LogError("EnemySpawner: Config is null!");
+            return;
+        }
+
         currentLevelConfig = config;
         currentWave = 1;
         enemiesAlive = 0;
@@ -50,7 +56,10 @@ public class EnemySpawner : MonoBehaviour
         ClearAllEnemies();
 
         // Начальный спавн врагов
-        SpawnInitialEnemies(config);
+        if (currentLevelConfig.enemyCount > 0)
+        {
+            SpawnInitialEnemies(config);
+        }
 
         // Запуск волнового спавна
         if (spawningCoroutine != null)
@@ -81,7 +90,7 @@ public class EnemySpawner : MonoBehaviour
             yield return new WaitForSeconds(spawnInterval);
 
             // Проверяем нужно ли спавнить новых врагов
-            if (enemiesAlive < currentLevelConfig.enemyCount / 2 &&
+            if (enemiesAlive < maxEnemiesPerWave / 2 &&
                 enemiesSpawnedThisWave < currentLevelConfig.enemyCount)
             {
                 SpawnEnemy();
@@ -97,6 +106,12 @@ public class EnemySpawner : MonoBehaviour
 
     void SpawnEnemy()
     {
+        if (currentLevelConfig == null)
+        {
+            Debug.LogError("EnemySpawner: No level config set!");
+            return;
+        }
+
         if (spawnAreas == null || spawnAreas.Length == 0)
         {
             Debug.LogWarning("EnemySpawner: Нет зон спавна!");
@@ -119,6 +134,7 @@ public class EnemySpawner : MonoBehaviour
             Enemy enemyComponent = enemy.GetComponent<Enemy>();
             if (enemyComponent != null)
             {
+                // Подписываемся на событие смерти врага
                 enemyComponent.OnEnemyDestroyed += OnEnemyDestroyed;
                 enemyComponent.isActive = true;
             }
@@ -133,7 +149,10 @@ public class EnemySpawner : MonoBehaviour
 
     GameObject SelectEnemyType()
     {
-        if (!currentLevelConfig.hasScanners && !currentLevelConfig.hasGuardians && !currentLevelConfig.hasTurrets)
+        if (currentLevelConfig == null) return null;
+
+        // Если нет доступных врагов
+        if (!currentLevelConfig.hasScanners) // && !currentLevelConfig.hasGuardians && !currentLevelConfig.hasTurrets
             return null;
 
         // Веса спавна в зависимости от уровня
@@ -143,22 +162,26 @@ public class EnemySpawner : MonoBehaviour
 
         if (randomValue < weights[0] && currentLevelConfig.hasScanners && scannerPrefab != null)
             return scannerPrefab;
-        else if (randomValue < weights[1] && currentLevelConfig.hasGuardians && guardianPrefab != null)
-            return guardianPrefab;
-        else if (currentLevelConfig.hasTurrets && turretPrefab != null)
-            return turretPrefab;
+        // else if (randomValue < weights[1] && currentLevelConfig.hasGuardians && guardianPrefab != null)
+        //     return guardianPrefab;
+        // else if (currentLevelConfig.hasTurrets && turretPrefab != null)
+        //     return turretPrefab;
 
         // Fallback
         if (currentLevelConfig.hasScanners && scannerPrefab != null)
             return scannerPrefab;
-        else if (currentLevelConfig.hasGuardians && guardianPrefab != null)
-            return guardianPrefab;
-        else
-            return null;
+        // else if (currentLevelConfig.hasGuardians && guardianPrefab != null)
+        //     return guardianPrefab;
+        // else if (currentLevelConfig.hasTurrets && turretPrefab != null)
+        //     return turretPrefab;
+
+        return null;
     }
 
     float[] CalculateSpawnWeights()
     {
+        if (currentLevelConfig == null) return new float[] { 1, 2, 3 };
+
         float scannerWeight = 0f;
         float guardianWeight = 0f;
         float turretWeight = 0f;
@@ -168,13 +191,10 @@ public class EnemySpawner : MonoBehaviour
         {
             case "Внешний Периметр":
                 scannerWeight = 1f;
-                guardianWeight = 0f;
-                turretWeight = 0f;
                 break;
             case "Архив":
                 scannerWeight = 0.6f;
                 guardianWeight = 0.4f;
-                turretWeight = 0f;
                 break;
             case "Серверная":
                 scannerWeight = 0.4f;
@@ -190,6 +210,12 @@ public class EnemySpawner : MonoBehaviour
                 scannerWeight = 0.2f;
                 guardianWeight = 0.4f;
                 turretWeight = 0.4f;
+                break;
+            default:
+                // Если имя уровня не распознано, используем стандартные веса
+                scannerWeight = 0.5f;
+                guardianWeight = 0.3f;
+                turretWeight = 0.2f;
                 break;
         }
 
@@ -242,6 +268,8 @@ public class EnemySpawner : MonoBehaviour
 
     void IncreaseDifficulty()
     {
+        if (currentLevelConfig == null) return;
+
         // Увеличиваем количество врагов и скорость спавна
         currentLevelConfig.enemyCount = Mathf.RoundToInt(currentLevelConfig.enemyCount * 1.3f);
         spawnInterval = Mathf.Max(1f, spawnInterval * 0.9f);
@@ -251,6 +279,8 @@ public class EnemySpawner : MonoBehaviour
 
     public void ClearAllEnemies()
     {
+        if (activeEnemies == null) return;
+
         foreach (GameObject enemy in activeEnemies)
         {
             if (enemy != null)

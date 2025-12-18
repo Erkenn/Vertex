@@ -1,38 +1,27 @@
 using UnityEngine;
-using System.Collections;
+using System.Collections; // ← добавьте это для IEnumerator
 
 public abstract class Enemy : MonoBehaviour
 {
-    [Header("=== ������� ��������� ����� ===")]
+    [Header("=== ОСНОВНЫЕ ПАРАМЕТРЫ ===")]
     public int health = 1;
     public float moveSpeed = 3f;
-    public int damage = 1;
-    public float detectionRange = 5f;
-    public float attackRange = 1f;
     public int scoreValue = 100;
 
-    [Header("=== ��������� ����� ===")]
+    [Header("=== СОСТОЯНИЯ ===")]
     public bool isActive = true;
     public bool isStunned = false;
-    public bool isChasing = false;
 
-    [Header("=== ���������� ������� ===")]
-    public Material originalMaterial;
-    public Color alertColor = new Color(1f, 0.3f, 0.3f, 1f);
-    public GameObject deathEffect;
+    public System.Action OnEnemyDestroyed;
 
-    // ����������
+    // Компоненты
     protected Transform player;
     protected Rigidbody2D rb;
     protected SpriteRenderer spriteRenderer;
     protected Animator animator;
 
-    // ��������� ����������
-    protected float stunTimeRemaining = 0f;
-    protected Color originalColor;
-
-    // �������
-    public System.Action OnEnemyDestroyed;
+    // Для оглушения
+    protected float stunTimer = 0f;
 
     protected virtual void Start()
     {
@@ -41,122 +30,30 @@ public abstract class Enemy : MonoBehaviour
         spriteRenderer = GetComponent<SpriteRenderer>();
         animator = GetComponent<Animator>();
 
-        if (spriteRenderer != null)
-        {
-            originalMaterial = spriteRenderer.material;
-            originalColor = spriteRenderer.color;
-        }
-
-        Debug.Log($"{gameObject.name} ���������������");
+        isActive = true;
     }
 
     protected virtual void Update()
     {
-        if (!isActive || isStunned) return;
-
-        if (player != null)
-        {
-            float distanceToPlayer = Vector2.Distance(transform.position, player.position);
-
-            if (distanceToPlayer <= detectionRange)
-            {
-                if (!isChasing)
-                {
-                    StartChasing();
-                }
-                ChaseBehavior(distanceToPlayer);
-            }
-            else
-            {
-                if (isChasing)
-                {
-                    StopChasing();
-                }
-                PatrolBehavior();
-            }
-        }
-        else
-        {
-            PatrolBehavior();
-        }
-
-        UpdateStunStatus();
-    }
-
-    // === �������� ��������� ===
-    protected abstract void PatrolBehavior();
-    protected abstract void ChaseBehavior(float distanceToPlayer);
-
-    protected virtual void StartChasing()
-    {
-        isChasing = true;
-        if (spriteRenderer != null)
-            spriteRenderer.color = alertColor;
-
-        Debug.Log($"{gameObject.name} ����� �������������");
-    }
-
-    protected virtual void StopChasing()
-    {
-        isChasing = false;
-        if (spriteRenderer != null)
-            spriteRenderer.color = originalColor;
-    }
-
-    // === ������� ��������� ===
-    public virtual void GetStunned(float duration)
-    {
         if (!isActive) return;
 
-        isStunned = true;
-        stunTimeRemaining = duration;
-
-        // ������������� ��������
-        if (rb != null)
-            rb.linearVelocity = Vector2.zero;
-
-        // ���������� ������ ���������
-        if (spriteRenderer != null)
-        {
-            spriteRenderer.color = new Color(0.5f, 0.5f, 1f, 0.7f);
-        }
-
-        Debug.Log($"{gameObject.name} ������� �� {duration} ���");
-    }
-
-    protected virtual void UpdateStunStatus()
-    {
         if (isStunned)
         {
-            stunTimeRemaining -= Time.deltaTime;
-            if (stunTimeRemaining <= 0)
-            {
-                RecoverFromStun();
-            }
-        }
-    }
-
-    protected virtual void RecoverFromStun()
-    {
-        isStunned = false;
-        stunTimeRemaining = 0f;
-
-        if (spriteRenderer != null)
-        {
-            spriteRenderer.color = isChasing ? alertColor : originalColor;
+            HandleStun();
+            return;
         }
 
-        Debug.Log($"{gameObject.name} ������������� ����� ���������");
+        CustomBehavior();
     }
 
-    // === ������� �������� � ����� ===
+    protected abstract void CustomBehavior();
+
+    // === НОВЫЙ МЕТОД: ВЗЯТИЕ УРОНА ===
     public virtual void TakeDamage(int damageAmount)
     {
         if (!isActive) return;
 
         health -= damageAmount;
-
-        // ���������� �������� �����
         StartCoroutine(DamageFlash());
 
         if (health <= 0)
@@ -179,52 +76,55 @@ public abstract class Enemy : MonoBehaviour
     protected virtual void Die()
     {
         isActive = false;
-
-        // ���������� ������ ������
-        if (deathEffect != null)
-        {
-            Instantiate(deathEffect, transform.position, Quaternion.identity);
-        }
-
-        // ������� ������
-        GameManager.Instance?.RegisterEnemyDestroyed();
-
-        // ������� �����������
         OnEnemyDestroyed?.Invoke();
-
-        Debug.Log($"{gameObject.name} ���������");
-
-        // ����������� �������
         Destroy(gameObject);
     }
 
-    // === ������� ����� ===
-    protected virtual void OnCollisionEnter2D(Collision2D collision)
+    // === ОСТАЛЬНЫЕ МЕТОДЫ ===
+    public virtual void GetStunned(float duration)
     {
-        if (!isActive || isStunned) return;
+        if (!isActive) return;
 
-        PlayerController player = collision.gameObject.GetComponent<PlayerController>();
-        if (player != null)
+        isStunned = true;
+        stunTimer = duration;
+
+        if (rb != null)
+            rb.linearVelocity = Vector2.zero;
+
+        if (spriteRenderer != null)
+            spriteRenderer.color = new Color(0.7f, 0.7f, 1f, 0.8f);
+
+        Debug.Log($"{gameObject.name} оглушен на {duration} сек");
+    }
+
+    protected virtual void HandleStun()
+    {
+        stunTimer -= Time.deltaTime;
+        if (stunTimer <= 0)
         {
-            AttackPlayer(player);
+            RecoverFromStun();
         }
     }
 
-    protected virtual void AttackPlayer(PlayerController player)
+    protected virtual void RecoverFromStun()
     {
-        player.TakeDamage(damage);
-        Debug.Log($"{gameObject.name} �������� ������");
+        isStunned = false;
+        if (spriteRenderer != null)
+            spriteRenderer.color = Color.white;
     }
 
-    // === ������������ � EDITOR ===
-    protected virtual void OnDrawGizmosSelected()
+    public void StopEnemy()
     {
-        // ������ �����������
-        Gizmos.color = Color.yellow;
-        Gizmos.DrawWireSphere(transform.position, detectionRange);
-
-        // ������ �����
-        Gizmos.color = Color.red;
-        Gizmos.DrawWireSphere(transform.position, attackRange);
+        enabled = false;
+        if (rb != null)
+        {
+            rb.linearVelocity = Vector2.zero;
+            rb.simulated = false;
+        }
+        if (animator != null)
+        {
+            animator.enabled = false;
+        }
+        isActive = false;
     }
 }
