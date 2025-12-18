@@ -8,6 +8,10 @@ TagManager:
   - Exit
   - Coin
   - Scanner
+  - Guardian
+  - Obstacle
+  - Wall
+  - Ground
   layers:
   - Default
   - TransparentFX

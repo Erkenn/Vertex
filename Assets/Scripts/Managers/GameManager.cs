@@ -299,6 +299,7 @@ public class GameManager : MonoBehaviour
     public void CollectCoin(int value = 1)
     {
         coinsCollected += value;
+        Debug.Log($"UIManager.Instance для монет = {(UIManager.Instance != null ? "OK" : "NULL!")}");
         Debug.Log($"💰 Монета подобрана! Всего: {coinsCollected}");
         OnCoinCollected?.Invoke();
 

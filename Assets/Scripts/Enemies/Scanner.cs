@@ -10,6 +10,9 @@ public class Scanner : Enemy
     public float scanDistance = 10f;
     public LayerMask playerLayer;
 
+    [Range(0, 90)]
+    public float scanAngle = 45f; // по умолчанию 45°
+
     private int currentPoint = 0;
     private bool isWaiting = false;
     private float waitTimer = 0f;
@@ -78,21 +81,24 @@ public class Scanner : Enemy
     {
         if (hasKilledPlayer || player == null) return;
 
-        // Направление сканирования: влево или вправо в зависимости от ориентации
-        Vector2 scanDirection = spriteRenderer.flipX ? Vector2.right : Vector2.left;
+        // Направление взгляда (влево/вправо)
+        Vector2 lookDirection = spriteRenderer.flipX ? Vector2.right : Vector2.left;
 
-        // Луч под 45 градусов вниз
-        Vector2 angledDirection = new Vector2(scanDirection.x, -1f).normalized;
+        // 🔥 РАСЧЁТ НАПРАВЛЕНИЯ С УЧЁТОМ УГЛА
+        float angleRad = scanAngle * Mathf.Deg2Rad;
+        Vector2 scanDirection = new Vector2(
+            lookDirection.x,
+            -Mathf.Tan(angleRad) * Mathf.Abs(lookDirection.x)
+        ).normalized;
 
-        // Начальная точка луча (немного смещенная от центра)
-        Vector2 scanOrigin = (Vector2)transform.position + new Vector2(scanDirection.x * 0.5f, -0.3f);
+        // Начало луча
+        Vector2 scanOrigin = (Vector2)transform.position + lookDirection * 0.5f + Vector2.down * 0.3f;
 
-        // Отладочный луч
-        Debug.DrawRay(scanOrigin, angledDirection * scanDistance, Color.cyan);
+        // Отладка
+        Debug.DrawRay(scanOrigin, scanDirection * scanDistance, Color.cyan);
 
-        // Проверка столкновения
-        RaycastHit2D hit = Physics2D.Raycast(scanOrigin, angledDirection, scanDistance, playerLayer);
-
+        // Проверка
+        RaycastHit2D hit = Physics2D.Raycast(scanOrigin, scanDirection, scanDistance, playerLayer);
         if (hit.collider != null && hit.collider.CompareTag("Player"))
         {
             KillPlayer();
@@ -144,10 +150,16 @@ public class Scanner : Enemy
         // Рисуем зону сканирования
         if (Application.isPlaying && spriteRenderer != null)
         {
-            Vector2 scanDirection = spriteRenderer.flipX ? Vector2.right : Vector2.left;
-            Vector2 angledDirection = new Vector2(scanDirection.x, -1f).normalized;
+            Vector2 lookDirection = spriteRenderer.flipX ? Vector2.right : Vector2.left;
+            float angleRad = scanAngle * Mathf.Deg2Rad;
+            Vector2 scanDirection = new Vector2(
+                lookDirection.x,
+                -Mathf.Tan(angleRad) * Mathf.Abs(lookDirection.x)
+            ).normalized;
+
             Gizmos.color = Color.cyan;
-            Gizmos.DrawLine(transform.position, (Vector2)transform.position + angledDirection * scanDistance);
+            Gizmos.DrawLine(transform.position, (Vector2)transform.position + scanDirection * scanDistance);
         }
     }
+
 }

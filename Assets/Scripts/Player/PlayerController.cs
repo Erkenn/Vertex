@@ -226,6 +226,11 @@ public class PlayerController : MonoBehaviour
             UseHack();
         }
 
+        if (Input.GetKeyDown(KeyCode.O) && CanUseShield())
+        {
+            UseShield();
+        }
+
         // Отладка
         if (Input.GetKeyDown(KeyCode.F1)) Debug.Log($"Crouch: {isCrouching}, Wants: {wantsToCrouch}, Height: {currentColliderHeight:F2}");
         if (Input.GetKeyDown(KeyCode.T)) TakeDamage(10);
@@ -553,6 +558,30 @@ public class PlayerController : MonoBehaviour
         }
     }
 
+    void UseShield()
+    {
+        if (IsGamePaused()) return;
+
+        // Тратим заряд
+        currentShieldCharges--;
+
+        // Активируем щит
+        isShieldActive = true;
+
+        // Визуальный эффект (если есть)
+        if (shieldEffect != null)
+            shieldEffect.SetActive(true);
+
+        spriteRenderer.color = new Color(0.3f, 0.8f, 1f, 0.8f);
+
+        // Обновляем UI
+        UIManager.Instance?.UpdateAbilitiesUI(currentHackCharges, currentShieldCharges);
+
+        // Деактивация через 3 секунды
+        Invoke(nameof(DeactivateShield), shieldDuration);
+
+        Debug.Log("🛡 Активирован Щит!");
+    }
 
     void OnTriggerEnter2D(Collider2D other)
     {
