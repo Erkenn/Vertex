@@ -3,18 +3,21 @@
 public class Guardian : Enemy
 {
     [Header("=== НАСТРОЙКИ СТРАЖА ===")]
-    public float detectionDistance = 8f;
+    public float detectionDistance = 15f;
     public float attackRate = 1f;
     public int attackDamage = 30;
     public float groundCheckDistance = 0.2f;
     [Tooltip("Слой земли для проверки")]
     public LayerMask groundLayer;
+    [Header("Преследование")]
+    public float chaseSpeed = 6f;// Скорость погони
+    public float attackRange = 1.5f; // Дистанция атаки
 
     private bool isChasing = false;
     private bool canAttack = true;
     private float attackTimer = 0f;
     private Collider2D guardianCollider;
-    private float originalColliderHeight;
+    private Vector2 moveDirection;
 
     protected override void Start()
     {
@@ -24,29 +27,102 @@ public class Guardian : Enemy
 
         // Получаем коллайдер
         guardianCollider = GetComponent<Collider2D>();
-        if (guardianCollider != null)
-        {
-            originalColliderHeight = guardianCollider.bounds.size.y;
-        }
 
-        // Настраиваем Rigidbody2D
+        FixSpriteColliderAlignment();
+
+        // НАСТРАИВАЕМ Rigidbody2D
         ConfigureRigidbody();
+
+        // ФИКС: Исправляем позицию при старте
+        Invoke(nameof(FixSpawnPosition), 0.05f);
     }
 
     private void ConfigureRigidbody()
     {
         if (rb != null)
         {
-            rb.gravityScale = 3f; // Сильная гравитация для лучшего прилипания к земле
+            // ГРАВИТАЦИЯ И ФИЗИКА
+            rb.gravityScale = 1f;
+            rb.mass = 3f;
+            rb.linearDamping = 2f; // ПРАВИЛЬНО: drag, а не linearDamping
+            rb.angularDamping = 0.05f; // ПРАВИЛЬНО: angularDrag
             rb.constraints = RigidbodyConstraints2D.FreezeRotation;
             rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
-            rb.sleepMode = RigidbodySleepMode2D.NeverSleep;
+            rb.interpolation = RigidbodyInterpolation2D.Interpolate;
 
-            // Важно: устанавливаем массу и линейное сопротивление
-            rb.mass = 10f; // Тяжелый, чтобы не отталкивался
-            rb.linearDamping = 2f; // Быстрее останавливается
-            rb.angularDamping = 0.05f;
+            Debug.Log($"Guardian Rigidbody настроен");
         }
+    }
+
+    private void FixSpriteColliderAlignment()
+    {
+        SpriteRenderer sr = GetComponent<SpriteRenderer>();
+        Collider2D col = GetComponent<Collider2D>();
+
+        if (sr == null || col == null) return;
+
+        // 1. Найти разницу между центрами
+        float spriteCenterY = sr.bounds.center.y;
+        float colliderCenterY = col.bounds.center.y;
+        float differenceY = spriteCenterY - colliderCenterY;
+
+        Debug.Log($"Разница позиций спрайт-коллайдер: {differenceY}");
+
+        // 2. Исправить позицию спрайта
+        if (Mathf.Abs(differenceY) > 0.01f)
+        {
+            transform.position += Vector3.up * differenceY;
+            Debug.Log($"Исправлено: сдвинуто на {differenceY}");
+        }
+
+        // 3. Проверить границы
+        float spriteBottom = sr.bounds.min.y;
+        float colliderBottom = col.bounds.min.y;
+
+        if (spriteBottom < colliderBottom)
+        {
+            float fixAmount = colliderBottom - spriteBottom + 0.05f;
+            Debug.Log($"Спрайт ниже коллайдера. Поднимаем на: {fixAmount}");
+            transform.position += Vector3.up * fixAmount;
+        }
+
+        // 4. Дополнительно: сделать Z = 0
+        transform.position = new Vector3(transform.position.x, transform.position.y, 0);
+    }
+
+    void FixSpawnPosition()
+    {
+        if (guardianCollider == null || rb == null) return;
+
+        // Временно делаем kinematic для точной установки позиции
+        RigidbodyType2D originalType = rb.bodyType;
+        rb.bodyType = RigidbodyType2D.Kinematic;
+
+        float rayLength = 5f;
+        Vector2 rayStart = transform.position + Vector3.up * 2f;
+
+        RaycastHit2D hit = Physics2D.Raycast(
+            rayStart,
+            Vector2.down,
+            rayLength,
+            groundLayer
+        );
+
+        if (hit.collider != null)
+        {
+            float halfHeight = guardianCollider.bounds.extents.y;
+            Vector2 targetPosition = new Vector2(
+                transform.position.x,
+                hit.point.y + halfHeight + 0.1f
+            );
+
+            // Используем MovePosition для плавного перемещения
+            rb.MovePosition(targetPosition);
+            Debug.Log($"Guardian установлен на высоту: {targetPosition.y}");
+        }
+
+        // Возвращаем оригинальный тип
+        rb.bodyType = originalType;
     }
 
     protected override void CustomBehavior()
@@ -59,95 +135,60 @@ public class Guardian : Enemy
         if (playerDetected && !isChasing)
         {
             isChasing = true;
-            Debug.Log($"🛡️ Страж {name} обнаружил игрока!");
+            Debug.Log($"🛡️ Страж {name} начал преследование!");
         }
         else if (!playerDetected && isChasing)
         {
             isChasing = false;
-            StopMovement();
+            moveDirection = Vector2.zero;
             Debug.Log($"🛡️ Страж {name} потерял игрока");
         }
 
         if (isChasing)
         {
-            // Проверяем, можем ли мы двигаться
-            if (IsGrounded() && CanMoveToPlayer())
-            {
-                MoveTowardsPlayer();
-            }
-            else
-            {
-                // Если не можем двигаться, останавливаемся
-                StopMovement();
-            }
-        }
-    }
-
-    private void StopMovement()
-    {
-        if (rb != null && IsGrounded())
-        {
-            rb.linearVelocity = new Vector2(0, rb.linearVelocity.y);
-        }
-    }
-
-    private bool CanMoveToPlayer()
-    {
-        if (player == null) return false;
-
-        // Проверяем, нет ли препятствия перед нами
-        float directionX = Mathf.Sign(player.position.x - transform.position.x);
-        float checkDistance = 0.5f;
-
-        Vector2 rayOrigin = transform.position;
-        RaycastHit2D hit = Physics2D.Raycast(
-            rayOrigin,
-            new Vector2(directionX, 0),
-            checkDistance
-        );
-
-        Debug.DrawRay(rayOrigin, new Vector2(directionX, 0) * checkDistance, Color.blue);
-
-        // Если есть препятствие, но это не игрок - не можем двигаться
-        if (hit.collider != null && !hit.collider.CompareTag("Player"))
-        {
-            return false;
-        }
-
-        return true;
-    }
-
-    private void MoveTowardsPlayer()
-    {
-        if (player == null || !IsGrounded()) return;
-
-        // Направление по горизонтали
-        float directionX = Mathf.Sign(player.position.x - transform.position.x);
-        float chaseSpeed = moveSpeed * 1.5f;
-
-        if (rb != null)
-        {
-            // Плавное движение
-            float targetVelocityX = directionX * chaseSpeed;
-            float currentVelocityX = rb.linearVelocity.x;
-            float smoothVelocityX = Mathf.Lerp(currentVelocityX, targetVelocityX, Time.deltaTime * 10f);
-
-            rb.linearVelocity = new Vector2(smoothVelocityX, rb.linearVelocity.y);
+            // Вычисляем направление к игроку
+            float directionX = Mathf.Sign(player.position.x - transform.position.x);
+            moveDirection = new Vector2(directionX, 0);
 
             // Поворот спрайта
             if (spriteRenderer != null)
             {
                 spriteRenderer.flipX = directionX < 0;
             }
+
+            // Если игрок близко - атакуем
+            if (distanceToPlayer <= attackRange)
+            {
+                TryAttack();
+            }
         }
+    }
 
-        // Атака при близком расстоянии
-        float horizontalDistance = Mathf.Abs(player.position.x - transform.position.x);
-        float verticalDistance = Mathf.Abs(player.position.y - transform.position.y);
-
-        if (horizontalDistance < 1f && verticalDistance < 1.5f)
+    private void FixedUpdate()
+    {
+        // ВСЁ ДВИЖЕНИЕ ТОЛЬКО В FixedUpdate!
+        if (rb != null && IsGrounded())
         {
-            TryAttack();
+            if (isChasing && moveDirection != Vector2.zero)
+            {
+                // Используем velocity (не linearVelocity!)
+                float currentChaseSpeed = chaseSpeed;
+                Vector2 targetVelocity = moveDirection * currentChaseSpeed;
+
+                // Плавное изменение скорости
+                rb.linearVelocity = new Vector2(
+                    Mathf.Lerp(rb.linearVelocity.x, targetVelocity.x, Time.fixedDeltaTime * 10f),
+                    rb.linearVelocity.y
+                );
+            }
+            else if (!isChasing)
+            {
+                // Плавная остановка
+                rb.linearVelocity = new Vector2(
+                    Mathf.Lerp(rb.linearVelocity.x, 0, Time.fixedDeltaTime * 5f),
+                    rb.linearVelocity.y
+                );
+            }
         }
     }
 
@@ -158,10 +199,9 @@ public class Guardian : Enemy
         float checkDistance = groundCheckDistance;
         Vector2 rayOrigin = new Vector2(
             transform.position.x,
-            transform.position.y - (guardianCollider.bounds.extents.y - 0.1f)
+            transform.position.y - guardianCollider.bounds.extents.y + 0.05f
         );
 
-        // Проверяем лучом вниз
         RaycastHit2D hit = Physics2D.Raycast(
             rayOrigin,
             Vector2.down,
@@ -169,29 +209,9 @@ public class Guardian : Enemy
             groundLayer
         );
 
-        // Также можно проверить дополнительными лучами по бокам коллайдера
-        RaycastHit2D hitLeft = Physics2D.Raycast(
-            rayOrigin + Vector2.left * guardianCollider.bounds.extents.x * 0.5f,
-            Vector2.down,
-            checkDistance,
-            groundLayer
-        );
-
-        RaycastHit2D hitRight = Physics2D.Raycast(
-            rayOrigin + Vector2.right * guardianCollider.bounds.extents.x * 0.5f,
-            Vector2.down,
-            checkDistance,
-            groundLayer
-        );
-
-        // Визуализация для отладки
         Debug.DrawRay(rayOrigin, Vector2.down * checkDistance, Color.green);
-        Debug.DrawRay(rayOrigin + Vector2.left * guardianCollider.bounds.extents.x * 0.5f,
-                     Vector2.down * checkDistance, Color.yellow);
-        Debug.DrawRay(rayOrigin + Vector2.right * guardianCollider.bounds.extents.x * 0.5f,
-                     Vector2.down * checkDistance, Color.yellow);
 
-        return hit.collider != null || hitLeft.collider != null || hitRight.collider != null;
+        return hit.collider != null;
     }
 
     private void TryAttack()
@@ -213,11 +233,11 @@ public class Guardian : Enemy
             attackTimer = 1f / attackRate;
             Debug.Log($"🛡️ Страж ударил игрока ({attackDamage} урона)");
 
-            // Легкий отскок при атаке
+            // Отскок после атаки
             if (rb != null)
             {
                 float directionFromPlayer = Mathf.Sign(transform.position.x - player.position.x);
-                rb.linearVelocity = new Vector2(directionFromPlayer * 2f, rb.linearVelocity.y);
+                rb.linearVelocity = new Vector2(directionFromPlayer * 3f, rb.linearVelocity.y);
             }
         }
     }
@@ -226,7 +246,7 @@ public class Guardian : Enemy
     {
         base.Update();
 
-        // Таймер атаки
+        // Таймер атаки в Update
         if (!canAttack)
         {
             attackTimer -= Time.deltaTime;
@@ -236,97 +256,12 @@ public class Guardian : Enemy
                 attackTimer = 0;
             }
         }
-
-        // Отладочная информация
-        Debug.Log($"Guardian: Grounded={IsGrounded()}, Velocity={rb.linearVelocity}");
-    }
-
-    private void FixedUpdate()
-    {
-        // Исправляем позицию, если провалился в землю
-        FixPositionIfSunk();
-
-        // В FixedUpdate работаем с физикой
-        if (!isChasing && rb != null && IsGrounded())
-        {
-            // Плавная остановка
-            float currentX = rb.linearVelocity.x;
-            float newX = Mathf.Lerp(currentX, 0, Time.fixedDeltaTime * 15f);
-            rb.linearVelocity = new Vector2(newX, rb.linearVelocity.y);
-        }
-    }
-
-    private void FixPositionIfSunk()
-    {
-        if (guardianCollider == null) return;
-
-        // Проверяем, не провалился ли страж в землю
-        Vector2 checkOrigin = transform.position;
-        float checkDepth = 0.5f;
-
-        RaycastHit2D groundHit = Physics2D.Raycast(
-            checkOrigin,
-            Vector2.down,
-            guardianCollider.bounds.extents.y + checkDepth,
-            groundLayer
-        );
-
-        if (groundHit.collider != null)
-        {
-            // Если слишком глубоко в земле, приподнимаем
-            float desiredY = groundHit.point.y + guardianCollider.bounds.extents.y + 0.05f;
-            if (transform.position.y < desiredY - 0.1f)
-            {
-                Vector3 newPosition = transform.position;
-                newPosition.y = Mathf.Lerp(newPosition.y, desiredY, Time.fixedDeltaTime * 10f);
-                rb.MovePosition(newPosition);
-            }
-        }
     }
 
     private void OnCollisionEnter2D(Collision2D collision)
     {
-        // Если столкнулись с игроком
         if (collision.gameObject.CompareTag("Player"))
         {
-            // Не отталкиваем игрока сильно
-            if (rb != null)
-            {
-                // Минимальное отталкивание
-                rb.linearVelocity = new Vector2(rb.linearVelocity.x * 0.1f, rb.linearVelocity.y);
-            }
-
-            TryAttack();
-        }
-        // Если столкнулись с землей или стеной
-        else if (collision.gameObject.layer == LayerMask.NameToLayer("Ground") ||
-                 collision.gameObject.CompareTag("Ground") ||
-                 collision.gameObject.CompareTag("Wall"))
-        {
-            // Останавливаем горизонтальное движение
-            if (rb != null)
-            {
-                rb.linearVelocity = new Vector2(0, rb.linearVelocity.y);
-            }
-        }
-    }
-
-    private void OnCollisionStay2D(Collision2D collision)
-    {
-        // Если игрок стоит на страже
-        if (collision.gameObject.CompareTag("Player"))
-        {
-            // Проверяем, находится ли игрок сверху
-            foreach (ContactPoint2D contact in collision.contacts)
-            {
-                if (contact.normal.y < -0.5f) // Игрок сверху
-                {
-                    // Игрок может прыгнуть на стража
-                    return;
-                }
-            }
-
-            // Если игрок не сверху, а сбоку - атакуем
             TryAttack();
         }
     }
