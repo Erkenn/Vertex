@@ -62,7 +62,6 @@ public class GameManager : MonoBehaviour
 
         // LoadAllPlayerData();
 
-        currentLevel = 1;
         coinsCollected = 0;
         dataPacketsCollected = 0;
 
@@ -168,35 +167,26 @@ public class GameManager : MonoBehaviour
 
     private IEnumerator RestartLevelAfterDelay(float delay)
     {
-        // Ждем в реальном времени (не зависит от Time.timeScale)
         yield return new WaitForSecondsRealtime(delay);
-
-        // Восстанавливаем время
         Time.timeScale = 1f;
 
-        // Размораживаем врагов (они будут уничтожены при загрузке сцены)
-        StopAllEnemiesImmediately();
-
-        // Уничтожаем всех врагов
+        // Уничтожаем врагов
         var enemies = FindObjectsOfType<Enemy>();
         foreach (var e in enemies)
             if (e != null) Destroy(e.gameObject);
 
-        // Сбрасываем данные уровня
+        // Сбрасываем данные
         coinsCollected = 0;
         dataPacketsCollected = 0;
         enemiesDestroyed = 0;
 
         // Скрываем экран смерти
         if (UIManager.Instance != null)
-        {
             UIManager.Instance.HideDeathScreen();
-        }
 
-        // Перезапускаем ТЕКУЩИЙ уровень
-        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+        // 🔥 ПРАВИЛЬНЫЙ ПЕРЕЗАПУСК ТЕКУЩЕГО УРОВНЯ:
+        SceneManager.LoadScene($"Level_{currentLevel}");
 
-        // Восстанавливаем состояние игры
         isGameActive = true;
     }
 

@@ -233,7 +233,6 @@ public class Guardian : Enemy
             attackTimer = 1f / attackRate;
             Debug.Log($"🛡️ Страж ударил игрока ({attackDamage} урона)");
 
-            // Отскок после атаки
             if (rb != null)
             {
                 float directionFromPlayer = Mathf.Sign(transform.position.x - player.position.x);

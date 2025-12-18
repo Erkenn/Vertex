@@ -406,7 +406,7 @@ public class PlayerController : MonoBehaviour
 
     public void TakeDamage(int damage)
     {
-        if (IsGamePaused() || alreadyDied) return; // ← ДОБАВЛЕНО: не принимаем урон если уже умерли
+        if (IsGamePaused() || alreadyDied) return;
 
         if (isShieldActive)
         {
