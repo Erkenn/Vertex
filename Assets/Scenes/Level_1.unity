@@ -4481,7 +4481,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 585672143}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 21de91aad25df654585133aecd6a3cc8, type: 3}
   m_Name: 
@@ -9269,12 +9269,12 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1098768553}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 72efec6446e561c4db26bcdbeb05a6bc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  testEmail: player5@test.com
+  testEmail: player9@test.com
   testPassword: password123
 --- !u!4 &1098768555
 Transform:
@@ -10378,7 +10378,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1234553110}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 392b536a862726c4491fed62218c08b0, type: 3}
   m_Name: 

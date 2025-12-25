@@ -9,9 +9,11 @@ public class FirebaseRestManager : MonoBehaviour
 {
     public static FirebaseRestManager Instance;
 
+    // === НАСТРОЙКИ FIREBASE ===
     private string apiKey = "AIzaSyCXRM0CMGeCBpR4gR_g9VNm7kHAig3i5P8";
     private string databaseUrl = "https://vertex-c946c-default-rtdb.europe-west1.firebasedatabase.app";
 
+    // === ДАННЫЕ ПОЛЬЗОВАТЕЛЯ ===
     private string currentUserId;
     private string idToken;
     private string refreshToken;
@@ -126,7 +128,7 @@ public class FirebaseRestManager : MonoBehaviour
     public void SignOut()
     {
         currentUserId = null;
-        idToken = null; // ← ИСПРАВЛЕНО: было idτoken
+        idToken = null;
         refreshToken = null;
         tokenExpiryTime = 0;
 
@@ -151,7 +153,7 @@ public class FirebaseRestManager : MonoBehaviour
             { "timestamp", DateTime.UtcNow.ToUnixTimeSeconds() }
         };
 
-        string json = Json.Serialize(data); // Используем простой сериализатор
+        string json = Json.Serialize(data);
         string path = $"users/{currentUserId}/levels/{levelIndex}";
         StartCoroutine(PutDataCoroutine(path, json));
     }
@@ -206,8 +208,8 @@ public class FirebaseRestManager : MonoBehaviour
             try
             {
                 var data = Json.Deserialize(json) as Dictionary<string, object>;
-                int coins = data.ContainsKey("coins") ? Convert.ToInt32(data["coins"]) : 0;
-                float time = data.ContainsKey("time") ? Convert.ToSingle(data["time"]) : 0f;
+                int coins = data != null && data.ContainsKey("coins") ? Convert.ToInt32(data["coins"]) : 0;
+                float time = data != null && data.ContainsKey("time") ? Convert.ToSingle(data["time"]) : 0f;
                 onLoaded?.Invoke(coins, time);
             }
             catch (Exception e)
@@ -233,21 +235,24 @@ public class FirebaseRestManager : MonoBehaviour
                 var root = Json.Deserialize(json) as Dictionary<string, object>;
                 var entries = new List<LeaderboardEntry>();
 
-                foreach (var kvp in root)
+                if (root != null)
                 {
-                    var userData = kvp.Value as Dictionary<string, object>;
-                    if (userData != null && userData.ContainsKey("totalTime"))
+                    foreach (var kvp in root)
                     {
-                        float totalTime = Convert.ToSingle(userData["totalTime"]);
-                        string displayName = userData.ContainsKey("displayName") ?
-                            userData["displayName"].ToString() : "Аноним";
-
-                        entries.Add(new LeaderboardEntry
+                        var userData = kvp.Value as Dictionary<string, object>;
+                        if (userData != null && userData.ContainsKey("totalTime"))
                         {
-                            UserId = kvp.Key,
-                            DisplayName = displayName,
-                            TotalTime = totalTime
-                        });
+                            float totalTime = Convert.ToSingle(userData["totalTime"]);
+                            string displayName = userData.ContainsKey("displayName") ?
+                                userData["displayName"].ToString() : "Аноним";
+
+                            entries.Add(new LeaderboardEntry
+                            {
+                                UserId = kvp.Key,
+                                DisplayName = displayName,
+                                TotalTime = totalTime
+                            });
+                        }
                     }
                 }
 
@@ -265,7 +270,7 @@ public class FirebaseRestManager : MonoBehaviour
     // === ВНУТРЕННИЕ МЕТОДЫ ===
     IEnumerator PutDataCoroutine(string path, string jsonData)
     {
-        string url = $"{databaseUrl}/{path}.json"; // ← Используем databaseUrl
+        string url = $"{databaseUrl}/{path}.json?auth={idToken}";
         byte[] body = Encoding.UTF8.GetBytes(jsonData);
 
         using (UnityWebRequest request = new UnityWebRequest(url, "PUT"))
@@ -280,12 +285,16 @@ public class FirebaseRestManager : MonoBehaviour
             {
                 Debug.LogError($"Ошибка сохранения данных ({url}): {request.error}");
             }
+            else
+            {
+                Debug.Log($"✅ Успешно сохранено: {path}");
+            }
         }
     }
 
     IEnumerator GetDataCoroutine(string path, Action<string> callback)
     {
-        string url = $"{databaseUrl}/{path}.json"; // ← Используем databaseUrl
+        string url = $"{databaseUrl}/{path}.json?auth={idToken}";
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
@@ -308,7 +317,7 @@ public class FirebaseRestManager : MonoBehaviour
         currentUserId = response.localId;
         idToken = response.idToken;
         refreshToken = response.refreshToken;
-        tokenExpiryTime = Time.time + (response.expiresIn - 60); // Обновляем за минуту до истечения
+        tokenExpiryTime = Time.time + (response.expiresIn - 60);
 
         PlayerPrefs.SetString("Firebase_UserId", currentUserId);
         PlayerPrefs.SetString("Firebase_IdToken", idToken);
@@ -326,7 +335,6 @@ public class FirebaseRestManager : MonoBehaviour
             refreshToken = PlayerPrefs.GetString("Firebase_RefreshToken");
             tokenExpiryTime = PlayerPrefs.GetFloat("Firebase_TokenExpiry");
 
-            // Проверяем, не истек ли токен
             if (Time.time >= tokenExpiryTime)
             {
                 RefreshToken();
@@ -336,7 +344,6 @@ public class FirebaseRestManager : MonoBehaviour
 
     void RefreshToken()
     {
-        // Реализация обновления токена (опционально для простоты)
         SignOut();
     }
 
@@ -377,41 +384,114 @@ public class FirebaseRestManager : MonoBehaviour
     }
 }
 
-// Простой JSON сериализатор/десериализатор
+// === ПРОСТОЙ JSON СЕРИАЛИЗАТОР ===
 public static class Json
 {
-    public static string Serialize(object obj)
+    public static string Serialize(Dictionary<string, object> dict)
     {
-        return JsonUtility.ToJson(new Wrapper(obj));
+        if (dict == null || dict.Count == 0)
+            return "{}";
+
+        var entries = new List<string>();
+        foreach (var kvp in dict)
+        {
+            string valueStr = FormatValue(kvp.Value);
+            string key = EscapeString(kvp.Key);
+            entries.Add($"\"{key}\":{valueStr}");
+        }
+        return "{" + string.Join(",", entries) + "}";
     }
 
     public static object Deserialize(string json)
     {
-        if (string.IsNullOrEmpty(json)) return null;
+        if (string.IsNullOrEmpty(json) || json == "null") return null;
         if (json.StartsWith("{") && json.EndsWith("}"))
         {
-            Wrapper wrapper = JsonUtility.FromJson<Wrapper>(json);
-            return wrapper.dictionary;
-        }
-        if (json.StartsWith("[") && json.EndsWith("]"))
-        {
-            ListWrapper listWrapper = JsonUtility.FromJson<ListWrapper>(json);
-            return listWrapper.list;
+            // Простой парсер для плоских объектов
+            var dict = new Dictionary<string, object>();
+            string content = json.Substring(1, json.Length - 2).Trim();
+            if (string.IsNullOrEmpty(content)) return dict;
+
+            var pairs = SplitJsonPairs(content);
+            foreach (var pair in pairs)
+            {
+                int colonIndex = pair.IndexOf(':');
+                if (colonIndex <= 0) continue;
+
+                string key = UnescapeString(pair.Substring(0, colonIndex).Trim().Trim('"'));
+                string valueStr = pair.Substring(colonIndex + 1).Trim();
+
+                object value = ParseJsonValue(valueStr);
+                dict[key] = value;
+            }
+            return dict;
         }
         return json;
     }
 
-    [Serializable]
-    private class Wrapper
+    static List<string> SplitJsonPairs(string content)
     {
-        public Dictionary<string, object> dictionary;
-        public Wrapper(object obj) { dictionary = obj as Dictionary<string, object>; }
+        var pairs = new List<string>();
+        int depth = 0;
+        int start = 0;
+        for (int i = 0; i < content.Length; i++)
+        {
+            char c = content[i];
+            if (c == '{' || c == '[') depth++;
+            else if (c == '}' || c == ']') depth--;
+            else if (c == ',' && depth == 0)
+            {
+                pairs.Add(content.Substring(start, i - start));
+                start = i + 1;
+            }
+        }
+        if (start < content.Length)
+            pairs.Add(content.Substring(start));
+        return pairs;
     }
 
-    [Serializable]
-    private class ListWrapper
+    static object ParseJsonValue(string valueStr)
     {
-        public List<object> list;
+        valueStr = valueStr.Trim();
+        if (valueStr == "null") return null;
+        if (valueStr.StartsWith("\"") && valueStr.EndsWith("\""))
+            return UnescapeString(valueStr.Substring(1, valueStr.Length - 2));
+        if (valueStr == "true") return true;
+        if (valueStr == "false") return false;
+        if (int.TryParse(valueStr, out int i)) return i;
+        if (float.TryParse(valueStr, System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out float f)) return f;
+        return valueStr;
+    }
+
+    static string FormatValue(object value)
+    {
+        if (value == null) return "null";
+        if (value is string str) return $"\"{EscapeString(str)}\"";
+        if (value is bool b) return b.ToString().ToLower();
+        if (value is float f) return f.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        if (value is double d) return d.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        if (value is int i) return i.ToString();
+        if (value is long l) return l.ToString();
+        return value.ToString();
+    }
+
+    static string EscapeString(string s)
+    {
+        return s.Replace("\\", "\\\\")
+                .Replace("\"", "\\\"")
+                .Replace("\n", "\\n")
+                .Replace("\r", "\\r")
+                .Replace("\t", "\\t");
+    }
+
+    static string UnescapeString(string s)
+    {
+        return s.Replace("\\\"", "\"")
+                .Replace("\\\\", "\\")
+                .Replace("\\n", "\n")
+                .Replace("\\r", "\r")
+                .Replace("\\t", "\t");
     }
 }
 

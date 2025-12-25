@@ -4,9 +4,16 @@ public class TestWrite : MonoBehaviour
 {
     void Start()
     {
+        Debug.Log("🔍 TestWrite.Start() вызван!"); // ← ДОБАВЛЕНО
+
+        if (FirebaseRestManager.Instance == null)
+        {
+            Debug.LogError("🔥 FirebaseRestManager не найден!");
+            return;
+        }
+
         if (FirebaseRestManager.Instance.IsAuthenticated)
         {
-            // Сохраняем тестовые данные
             FirebaseRestManager.Instance.SaveLevelProgress(1, 3, 99.9f);
             FirebaseRestManager.Instance.SavePlayerName("Тестовый Игрок");
             FirebaseRestManager.Instance.SaveLeaderboardEntry(99.9f);
