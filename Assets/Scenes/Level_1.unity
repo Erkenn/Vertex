@@ -4939,7 +4939,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &585672144
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -9775,6 +9775,64 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1057943380
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1057943382}
+  - component: {fileID: 1057943381}
+  m_Layer: 0
+  m_Name: GameManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1057943381
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1057943380}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 656c6821fb6dad743941f8757aff3d59, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  totalLives: 1
+  estimatedPlaytime: 1800
+  autoSaveEnabled: 1
+  currentLives: 0
+  currentLevel: 1
+  sessionTimer: 0
+  isGameActive: 1
+  isPaused: 0
+  dataPacketsCollected: 0
+  coinsCollected: 0
+  enemiesDestroyed: 0
+  bestCompletionTime: Infinity
+  totalSessionsPlayed: 0
+  achievements: []
+--- !u!4 &1057943382
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1057943380}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1062706501
 GameObject:
   m_ObjectHideFlags: 0
@@ -10361,7 +10419,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &1098768554
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -11470,7 +11528,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &1234553111
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -15480,64 +15538,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1721778000}
   m_CullTransparentMesh: 1
---- !u!1 &1728406433
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1728406435}
-  - component: {fileID: 1728406434}
-  m_Layer: 0
-  m_Name: GameManager
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &1728406434
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1728406433}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 656c6821fb6dad743941f8757aff3d59, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  totalLives: 1
-  estimatedPlaytime: 1800
-  autoSaveEnabled: 1
-  currentLives: 0
-  currentLevel: 1
-  sessionTimer: 0
-  isGameActive: 1
-  isPaused: 0
-  dataPacketsCollected: 0
-  coinsCollected: 0
-  enemiesDestroyed: 0
-  bestCompletionTime: Infinity
-  totalSessionsPlayed: 0
-  achievements: []
---- !u!4 &1728406435
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1728406433}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -357.20847, y: -679.2203, z: -6.952626}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1734639465
 GameObject:
   m_ObjectHideFlags: 0
@@ -18776,4 +18776,4 @@ SceneRoots:
   - {fileID: 1234553112}
   - {fileID: 712158054}
   - {fileID: 1098128155}
-  - {fileID: 1728406435}
+  - {fileID: 1057943382}
