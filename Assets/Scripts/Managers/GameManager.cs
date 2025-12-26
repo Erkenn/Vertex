@@ -5,7 +5,18 @@ using System.Collections.Generic;
 
 public class GameManager : MonoBehaviour
 {
-    public static GameManager Instance;
+    private static GameManager _instance;
+    public static GameManager Instance
+    {
+        get
+        {
+            if (_instance == null || _instance.gameObject == null)
+            {
+                _instance = null;
+            }
+            return _instance;
+        }
+    }
 
     [Header("=== ИГРОВЫЕ НАСТРОЙКИ ===")]
     public int totalLives = 1;
@@ -31,28 +42,26 @@ public class GameManager : MonoBehaviour
     [Header("=== СИСТЕМА ДОСТИЖЕНИЙ ===")]
     public List<Achievement> achievements = new List<Achievement>();
 
-    // События
     public System.Action OnGamePause;
     public System.Action OnGameResume;
     public System.Action OnGameOver;
     public System.Action OnLevelComplete;
     public System.Action OnDataPacketCollected;
     public System.Action OnEnemyDestroyed;
-    public System.Action OnCoinCollected; // ← Опционально, для будущего
+    public System.Action OnCoinCollected;
 
     void Awake()
     {
-        if (Instance == null)
-        {
-            Instance = this;
-            DontDestroyOnLoad(gameObject);
-            InitializeGameSystems();
-            Debug.Log("🎮 GameManager инициализирован");
-        }
-        else
+        if (_instance != null && _instance.gameObject != null)
         {
             Destroy(gameObject);
+            return;
         }
+
+        _instance = this;
+        DontDestroyOnLoad(gameObject);
+        InitializeGameSystems();
+        Debug.Log("🎮 GameManager инициализирован");
     }
 
     void InitializeGameSystems()
