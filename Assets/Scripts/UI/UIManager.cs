@@ -19,8 +19,12 @@ public class UIManager : MonoBehaviour
     public Image hackIcon;
     public TextMeshProUGUI hackCountText;
     public GameObject deathScreen;
+    public Button restartButtonInDeathScreen;
+    public Button statsButtonInDeathScreen;
     public Image coinIcon;
     public TextMeshProUGUI coinCountText;
+    public GameObject statsPanel;
+    public TextMeshProUGUI statsText;
 
     [Header("=== ИНДИКАТОРЫ СПОСОБНОСТЕЙ ===")]
     public Image hackCooldownOverlay;
@@ -54,21 +58,73 @@ public class UIManager : MonoBehaviour
     private PlayerController player;
     private GameManager gameManager;
 
-    public void ShowDeathScreen()
+    public Button restartLevelButton;
+    public Button showStatsButton;
+    private float cachedDeathTime;
+    private int cachedDeathCoins;
+    private int cachedDeathPackets;
+
+    public void ShowDeathScreen(float time, int coins, int dataPackets)
     {
+        // Сохраняем статистику
+        cachedDeathTime = time;
+        cachedDeathCoins = coins;
+        cachedDeathPackets = dataPackets;
+
         if (deathScreen != null)
         {
             deathScreen.SetActive(true);
-            Debug.Log("💀 Экран смерти показан");
+
+            if (restartButtonInDeathScreen != null)
+            {
+                restartButtonInDeathScreen.onClick.RemoveAllListeners();
+                restartButtonInDeathScreen.onClick.AddListener(OnRestartLevelFromDeath);
+            }
+
+            if (statsButtonInDeathScreen != null)
+            {
+                statsButtonInDeathScreen.onClick.RemoveAllListeners();
+                statsButtonInDeathScreen.onClick.AddListener(OnShowStatsFromDeath);
+            }
+        }
+    }
+
+    public void OnRestartLevelFromDeath()
+    {
+        HideDeathScreen();
+        if (GameManager.Instance != null)
+            GameManager.Instance.RestartCurrentLevel();
+        PlayUIClick();
+    }
+
+    public void OnShowStatsFromDeath()
+    {
+        // Форматируем статистику как красивый текст
+        string stats = $"<b>СТАТИСТИКА</b>\n\n" +
+                       $"Время: {FormatTime(cachedDeathTime)}\n" +
+                       $"Монеты: {cachedDeathCoins}\n" +
+                       $"Данные: {cachedDeathPackets}";
+
+        // Скрываем экран смерти
+        if (deathScreen != null)
+            deathScreen.SetActive(false);
+
+        // Показываем и заполняем панель статистики
+        if (statsPanel != null && statsText != null)
+        {
+            statsText.text = stats;
+            statsPanel.SetActive(true);
+        }
+        else
+        {
+            Debug.LogError("❌ statsPanel или statsText не назначены в UIManager!");
         }
     }
 
     public void HideDeathScreen()
     {
         if (deathScreen != null)
-        {
             deathScreen.SetActive(false);
-        }
     }
 
     public class Coin : MonoBehaviour
@@ -136,6 +192,8 @@ public class UIManager : MonoBehaviour
         if (victoryMenu != null) victoryMenu.SetActive(false);
         if (hudPanel != null) hudPanel.SetActive(true);
         if (pauseMenuPanel != null) pauseMenuPanel.SetActive(false);
+        if (restartLevelButton != null)
+            restartLevelButton.onClick.AddListener(OnRestartLevelClicked);
         if (gameManager != null)
             UpdateCoinsUI(gameManager.coinsCollected);
 
@@ -161,6 +219,20 @@ public class UIManager : MonoBehaviour
         if (shieldActiveIndicator != null)
         {
             shieldActiveIndicator.color = neonYellow;
+        }
+    }
+
+    public void OnRestartLevelClicked()
+    {
+        if (GameManager.Instance != null)
+        {
+            // Скрываем экран смерти
+            if (deathScreen != null) deathScreen.SetActive(false);
+
+            // Перезапускаем уровень
+            GameManager.Instance.RestartCurrentLevel();
+
+            PlayUIClick();
         }
     }
 

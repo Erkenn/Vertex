@@ -142,27 +142,25 @@ public class GameManager : MonoBehaviour
 
 
     // === СИСТЕМА ЖИЗНЕЙ ===
+    // В GameManager.cs замените PlayerDied():
     public void PlayerDied()
     {
-        Debug.Log("🔥 PlayerDied: показ экрана смерти и перезапуск");
-
-        // 1. Останавливаем всю игру
+        Debug.Log("🔥 PlayerDied вызван");
         isGameActive = false;
+        Time.timeScale = 1f; // ← важно: не оставляйте таймскейл = 0
 
-        // 2. Останавливаем время
-        Time.timeScale = 0f;
-
-        // 3. НЕМЕДЛЕННО останавливаем всех врагов
+        // Остановить всех врагов, но НЕ перезапускать уровень
         StopAllEnemiesImmediately();
 
-        // 4. Показываем экран смерти
+        // Показать экран смерти
         if (UIManager.Instance != null)
         {
-            UIManager.Instance.ShowDeathScreen();
+            UIManager.Instance.ShowDeathScreen(sessionTimer, coinsCollected, dataPacketsCollected);
         }
-
-        // 5. Запускаем перезапуск уровня через 1.5 секунды
-        StartCoroutine(RestartLevelAfterDelay(1.5f));
+        else
+        {
+            Debug.LogError("❌ UIManager.Instance == null при смерти!");
+        }
     }
 
     private IEnumerator RestartLevelAfterDelay(float delay)
@@ -306,6 +304,19 @@ public class GameManager : MonoBehaviour
             PlayerPrefs.SetInt("CoinsCollected", coinsCollected);
             PlayerPrefs.Save();
         }
+    }
+
+    public void RestartCurrentLevel()
+    {
+        coinsCollected = 0;
+        dataPacketsCollected = 0;
+        enemiesDestroyed = 0;
+
+        Time.timeScale = 1f;
+        isGameActive = true;
+        isPaused = false;
+
+        SceneManager.LoadScene($"Level_{currentLevel}");
     }
 
     public void RegisterEnemyDestroyed()

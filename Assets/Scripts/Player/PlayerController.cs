@@ -71,6 +71,9 @@ public class PlayerController : MonoBehaviour
     private Vector2[] originalPoints;
     private bool alreadyDied = false;
 
+    [Header("=== ГРАНИЦЫ УРОВНЯ ===")]
+    public float deathBoundaryY = -20f;
+
     void Start()
     {
         rb = GetComponent<Rigidbody2D>();
@@ -140,6 +143,7 @@ public class PlayerController : MonoBehaviour
         CheckGrounded();
         CheckIfCanStandUp();
         UpdateCrouchPercentage();
+        CheckDeathBoundaries();
     }
 
     void FixedUpdate()
@@ -267,6 +271,18 @@ public class PlayerController : MonoBehaviour
         else
         {
             rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, targetVelocity, deceleration * Time.fixedDeltaTime);
+        }
+    }
+
+    void CheckDeathBoundaries()
+    {
+        if (transform.position.y < deathBoundaryY)
+        {
+            // Мгновенная смерть без урона
+            if (!alreadyDied)
+            {
+                Die();
+            }
         }
     }
 
@@ -536,51 +552,15 @@ public class PlayerController : MonoBehaviour
 
     void Die()
     {
-        Debug.Log("💀 Игрок погиб!");
-
         if (alreadyDied) return;
         alreadyDied = true;
+
+        Debug.Log("💀 Игрок погиб!");
 
         // 1. Останавливаем игрока
         canMove = false;
 
-        // 2. Отключаем физику
-        if (rb != null)
-        {
-            rb.linearVelocity = Vector2.zero;
-            rb.simulated = false;
-        }
-
-        // 3. Просто меняем состояние аниматора (без триггеров)
-        if (animator != null)
-        {
-            // Если есть параметр "IsAlive", устанавливаем его в false
-            bool hasIsAlive = false;
-            foreach (AnimatorControllerParameter param in animator.parameters)
-            {
-                if (param.name == "IsAlive" && param.type == AnimatorControllerParameterType.Bool)
-                {
-                    hasIsAlive = true;
-                    break;
-                }
-            }
-
-            if (hasIsAlive)
-            {
-                animator.SetBool("IsAlive", false);
-            }
-            else
-            {
-                // Просто проигрываем анимацию по имени
-                animator.Play("Death"); // Или "Die", "Dead" - в зависимости от ваших анимаций
-            }
-        }
-
-        // 4. Отключаем коллайдер
-        if (playerCollider != null)
-            playerCollider.enabled = false;
-
-        // 5. Вызываем GameManager
+        // 2. Вызываем GameManager — но НЕ останавливаем время здесь!
         if (GameManager.Instance != null)
         {
             GameManager.Instance.PlayerDied();

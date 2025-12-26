@@ -23,6 +23,8 @@ public abstract class Enemy : MonoBehaviour
     // Для оглушения
     protected float stunTimer = 0f;
 
+    private bool alreadyDied = false;
+
     protected virtual void Start()
     {
         player = GameObject.FindGameObjectWithTag("Player")?.transform;
@@ -75,8 +77,19 @@ public abstract class Enemy : MonoBehaviour
 
     protected virtual void Die()
     {
-        isActive = false;
+        if (alreadyDied) return;
+        alreadyDied = true;
+
+        // Уведомляем GameManager или других слушателей
         OnEnemyDestroyed?.Invoke();
+
+        // Уведомление GameManager (опционально, но у вас есть такой вызов)
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.RegisterEnemyDestroyed();
+        }
+
+        // Уничтожаем объект
         Destroy(gameObject);
     }
 
