@@ -9,6 +9,9 @@ public class PlayerController : MonoBehaviour
     public float deceleration = 20f;
     public float crouchMoveSpeed = 4f;
 
+    private MovingPlatform currentPlatform = null;
+    private bool isOnMovingPlatform = false;
+
     [Header("=== ПРЫЖКИ ===")]
     public float jumpForce = 12f;
     public float jumpCooldown = 0.2f;
@@ -239,14 +242,30 @@ public class PlayerController : MonoBehaviour
     void HandleMovement()
     {
         float currentMoveSpeed = isCrouching ? crouchMoveSpeed : moveSpeed;
-        if (movement.magnitude > 0.1f)
+        float horizontalInput = movement.x;
+
+        // Основная желаемая скорость от игрока
+        float playerDesiredVelocityX = horizontalInput * currentMoveSpeed;
+
+        // Добавляем скорость платформы, если стоим на ней
+        if (currentPlatform != null)
         {
-            Vector2 targetVelocity = new Vector2(movement.x * currentMoveSpeed, rb.linearVelocity.y);
+            playerDesiredVelocityX += currentPlatform.GetPlatformVelocity().x;
+        }
+
+        Vector2 targetVelocity = new Vector2(playerDesiredVelocityX, rb.linearVelocity.y);
+
+        // Если игрок стоит на платформе — не тормозим, просто следуем за её скоростью
+        if (currentPlatform != null && Mathf.Abs(horizontalInput) < 0.1f)
+        {
+            rb.linearVelocity = new Vector2(currentPlatform.GetPlatformVelocity().x, rb.linearVelocity.y);
+        }
+        else if (Mathf.Abs(horizontalInput) > 0.1f)
+        {
             rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, targetVelocity, acceleration * Time.fixedDeltaTime);
         }
         else
         {
-            Vector2 targetVelocity = new Vector2(0f, rb.linearVelocity.y);
             rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, targetVelocity, deceleration * Time.fixedDeltaTime);
         }
     }
@@ -483,10 +502,20 @@ public class PlayerController : MonoBehaviour
     void UpdateVisuals()
     {
         if (animator == null) return;
-        float speed = Mathf.Abs(rb.linearVelocity.x);
+
+        float speed = 0f;
+
+        // Если НЕ на платформе — используем реальную скорость
+        if (!isOnMovingPlatform)
+        {
+            speed = Mathf.Abs(rb.linearVelocity.x);
+        }
+
         animator.SetFloat("Speed", speed);
+
         animator.SetBool("IsGrounded", isGrounded);
-        animator.SetBool("IsCrouching", isCrouching); 
+        animator.SetBool("IsCrouching", isCrouching);
+
         if (movement.x > 0.1f) spriteRenderer.flipX = false;
         else if (movement.x < -0.1f) spriteRenderer.flipX = true;
 
@@ -607,8 +636,28 @@ public class PlayerController : MonoBehaviour
         Destroy(dataPacket);
     }
 
-    void OnCollisionEnter2D(Collision2D collision) => CheckGroundOnCollision(collision);
+    
     void OnCollisionStay2D(Collision2D collision) => CheckGroundOnCollision(collision);
+
+    void OnCollisionEnter2D(Collision2D col)
+    {
+        if (col.gameObject.CompareTag("MovingPlatform"))
+        {
+            currentPlatform = col.gameObject.GetComponent<MovingPlatform>();
+            isOnMovingPlatform = true;
+        }
+        CheckGroundOnCollision(col);
+    }
+
+    void OnCollisionExit2D(Collision2D col)
+    {
+        if (col.gameObject.CompareTag("MovingPlatform"))
+        {
+            currentPlatform = null;
+            isOnMovingPlatform = false;
+        }
+        CheckGroundOnCollision(col);
+    }
 
     void CheckGroundOnCollision(Collision2D col)
     {

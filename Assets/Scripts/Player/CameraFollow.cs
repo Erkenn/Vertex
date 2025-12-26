@@ -3,11 +3,11 @@ using UnityEngine;
 public class CameraFollow : MonoBehaviour
 {
     public Transform player;
-    public Vector3 offset = new Vector3(0f, 5f, -10f);
+    public Vector3 offset = new Vector3(0f, 0f, -10f);
 
     // Границы уровня (в мировых координатах)
     public float leftLimit = -10f;
-    public float rightLimit = 50f;
+    public float rightLimit = 150f;
     public float bottomLimit = -10f;
     public float topLimit = 15f;
 
