@@ -28,7 +28,6 @@ public class FirebaseRestManager : MonoBehaviour
         {
             Instance = this;
             DontDestroyOnLoad(gameObject);
-            LoadAuthTokens();
         }
         else
         {
