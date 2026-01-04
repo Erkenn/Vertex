@@ -3,15 +3,32 @@ using UnityEngine.UI;
 using TMPro;
 using UnityEngine.SceneManagement;
 using System.Text;
+using System.Collections;
+using System.Collections.Generic;
 
 public class MainMenuManager : MonoBehaviour
 {
+    public static MainMenuManager Instance;
+
     // === ПАНЕЛИ ===
     public GameObject helpPanel;
     public GameObject accountPanel;
     public GameObject statsPanel;
+    public GameObject tutorialOfferPanelAfterRegister;
+    public GameObject tutorialOfferPanelAfterLogin;
+    public GameObject settingsPanel; // Добавили панель настроек
 
-    // === ИНФОРМАЦИОННЫЕ ПОДПАНЕЛИ (внутри HelpPanel) ===
+    // === ЭЛЕМЕНТЫ НАСТРОЕК (если управляем из этого скрипта) ===
+    [Header("Настройки")]
+    public Slider masterVolumeSlider;
+    public Slider musicVolumeSlider;
+    public Slider sfxVolumeSlider;
+    public Toggle fullscreenToggle;
+    public TMP_Dropdown resolutionDropdown;
+    public Button settingsApplyButton;
+    public Button settingsCloseButton;
+
+    // === ИНФОРМАЦИОННЫЕ ПОДПАНЕЛИ ===
     public GameObject controlsInfo;
     public GameObject abilityInfo;
     public GameObject enemiesInfo;
@@ -20,7 +37,6 @@ public class MainMenuManager : MonoBehaviour
     // === ПОЛЯ ВВОДА ===
     public TMP_InputField loginEmailInput;
     public TMP_InputField loginPasswordInput;
-
     public TMP_InputField registerEmailInput;
     public TMP_InputField registerPasswordInput;
     public TMP_InputField registerPasswordRepInput;
@@ -35,43 +51,391 @@ public class MainMenuManager : MonoBehaviour
     public Button accountButton;
 
     // === КНОПКИ В ПАНЕЛЯХ ===
-    // Account Panel - кнопки открытия форм
-    public Button loginButton;        // ← открывает LoginFields
-    public Button registerButton;     // ← открывает RegisterFields
+    public Button loginButton;
+    public Button registerButton;
     public Button viewStatsButton;
     public Button backToMenuButton;
-
-    // Кнопки отправки данных (внутри форм)
-    public Button submitLoginButton;   // ← НОВАЯ: кнопка "Войти" внутри LoginFields
-    public Button submitRegisterButton; // ← НОВАЯ: кнопка "Зарегистрироваться" внутри RegisterFields
-
-    // Help Panel навигация
+    public Button submitLoginButton;
+    public Button submitRegisterButton;
     public Button controlsButton;
     public Button abilitiesButton;
     public Button enemiesButton;
     public Button contactsButton;
     public Button helpExitButton;
-
-    // Кнопки "Назад"
     public Button backFromStatsButton;
 
     // === ВНУТРЕННИЕ ПАНЕЛИ АККАУНТА ===
     public GameObject loginFields;
     public GameObject registerFields;
 
+    // === КНОПКИ ТУТОРИАЛА ===
+    public Button startTutorialFromRegisterButton;
+    public Button startTutorialFromLoginButton;
+    public Button skipTutorialButton;
+    public Button exitGameButton;
+    public Button settingsButton;
+
+    // === АУДИО ССЫЛКИ ===
+    [Header("Аудио")]
+    public AudioSource backgroundMusic;
+    public AudioSource[] sfxSources;
+
     private GameObject currentHelpSection;
+    [HideInInspector] public bool isPlayerButtonEnabled = false;
+    private bool uiInitialized = false;
+
+    // Для настроек
+    private Resolution[] availableResolutions;
+
+    void Awake()
+    {
+        // Система синглтона с защитой от дублирования
+        if (Instance == null)
+        {
+            Instance = this;
+            DontDestroyOnLoad(gameObject);
+            SceneManager.sceneLoaded += OnSceneLoaded;
+            Debug.Log("✅ MainMenuManager создан как постоянный объект");
+        }
+        else if (Instance != this)
+        {
+            Debug.Log("⚠️ Уничтожен дубликат MainMenuManager");
+            Destroy(gameObject);
+            return;
+        }
+    }
 
     void Start()
     {
-        SetupUI();
-        UpdateAuthStatus();
+        Debug.Log("🎮 MainMenuManager запущен!");
 
-        // При старте показываем форму входа
-        ShowLoginFields();
+        // Инициализируем разрешения экрана
+        InitializeResolutions();
+
+        // Загружаем сохраненные настройки
+        LoadSettings();
+
+        // Если мы уже в главном меню, инициализируем UI сразу
+        if (SceneManager.GetActiveScene().name == "MainMenu" && !uiInitialized)
+        {
+            InitializeUI();
+        }
     }
 
-    void SetupUI()
+    // === ИНИЦИАЛИЗАЦИЯ РАЗРЕШЕНИЙ ===
+    void InitializeResolutions()
     {
+        availableResolutions = Screen.resolutions;
+
+        // Можно отфильтровать повторяющиеся разрешения
+        System.Collections.Generic.HashSet<string> uniqueResolutions = new System.Collections.Generic.HashSet<string>();
+
+        if (resolutionDropdown != null)
+        {
+            resolutionDropdown.ClearOptions();
+
+            List<string> options = new List<string>();
+            int currentResolutionIndex = 0;
+
+            for (int i = 0; i < availableResolutions.Length; i++)
+            {
+                // Пропускаем слишком маленькие разрешения
+                if (availableResolutions[i].width < 800 || availableResolutions[i].height < 600)
+                    continue;
+
+                string option = $"{availableResolutions[i].width} x {availableResolutions[i].height}";
+
+                // Добавляем только уникальные
+                if (uniqueResolutions.Add(option))
+                {
+                    options.Add(option);
+
+                    // Проверяем текущее разрешение
+                    if (availableResolutions[i].width == Screen.currentResolution.width &&
+                        availableResolutions[i].height == Screen.currentResolution.height)
+                    {
+                        currentResolutionIndex = options.Count - 1;
+                    }
+                }
+            }
+
+            resolutionDropdown.AddOptions(options);
+            resolutionDropdown.value = currentResolutionIndex;
+            resolutionDropdown.RefreshShownValue();
+        }
+    }
+
+    // === ЗАГРУЗКА НАСТРОЕК ===
+    void LoadSettings()
+    {
+        // Громкость
+        float masterVolume = PlayerPrefs.GetFloat("MasterVolume", 1f);
+        float musicVolume = PlayerPrefs.GetFloat("MusicVolume", 0.8f);
+        float sfxVolume = PlayerPrefs.GetFloat("SFXVolume", 0.9f);
+
+        if (masterVolumeSlider != null) masterVolumeSlider.value = masterVolume;
+        if (musicVolumeSlider != null) musicVolumeSlider.value = musicVolume;
+        if (sfxVolumeSlider != null) sfxVolumeSlider.value = sfxVolume;
+
+        // Применяем громкость
+        AudioListener.volume = masterVolume;
+        if (backgroundMusic != null) backgroundMusic.volume = musicVolume;
+
+        // Полноэкранный режим
+        bool fullscreen = PlayerPrefs.GetInt("Fullscreen", 1) == 1;
+        if (fullscreenToggle != null) fullscreenToggle.isOn = fullscreen;
+        Screen.fullScreen = fullscreen;
+
+        // Разрешение
+        int savedWidth = PlayerPrefs.GetInt("ResolutionWidth", Screen.currentResolution.width);
+        int savedHeight = PlayerPrefs.GetInt("ResolutionHeight", Screen.currentResolution.height);
+
+        if (resolutionDropdown != null)
+        {
+            for (int i = 0; i < resolutionDropdown.options.Count; i++)
+            {
+                string resText = resolutionDropdown.options[i].text;
+                if (resText.Contains($"{savedWidth} x {savedHeight}"))
+                {
+                    resolutionDropdown.value = i;
+                    break;
+                }
+            }
+        }
+    }
+
+    // === СОХРАНЕНИЕ НАСТРОЕК ===
+    void SaveSettings()
+    {
+        // Сохраняем громкость
+        if (masterVolumeSlider != null)
+            PlayerPrefs.SetFloat("MasterVolume", masterVolumeSlider.value);
+        if (musicVolumeSlider != null)
+            PlayerPrefs.SetFloat("MusicVolume", musicVolumeSlider.value);
+        if (sfxVolumeSlider != null)
+            PlayerPrefs.SetFloat("SFXVolume", sfxVolumeSlider.value);
+
+        // Сохраняем полноэкранный режим
+        if (fullscreenToggle != null)
+            PlayerPrefs.SetInt("Fullscreen", fullscreenToggle.isOn ? 1 : 0);
+
+        // Сохраняем разрешение
+        if (resolutionDropdown != null && resolutionDropdown.value < availableResolutions.Length)
+        {
+            Resolution selectedRes = availableResolutions[resolutionDropdown.value];
+            PlayerPrefs.SetInt("ResolutionWidth", selectedRes.width);
+            PlayerPrefs.SetInt("ResolutionHeight", selectedRes.height);
+        }
+
+        PlayerPrefs.Save();
+        Debug.Log("✅ Настройки сохранены");
+    }
+
+    // === ОБРАБОТЧИК ЗАГРУЗКИ СЦЕН ===
+    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        Debug.Log($"🔄 Загружена сцена: {scene.name}");
+
+        if (scene.name == "MainMenu")
+        {
+            // Если UI уже инициализирован, просто обновляем ссылки
+            if (uiInitialized)
+            {
+                ReconnectUIReferences();
+            }
+            else
+            {
+                InitializeUI();
+            }
+        }
+        else
+        {
+            // На других сценах скрываем UI главного меню
+            HideAllUIPanels();
+        }
+    }
+
+    // === ПЕРВОНАЧАЛЬНАЯ ИНИЦИАЛИЗАЦИЯ UI ===
+    private void InitializeUI()
+    {
+        Debug.Log("🔧 Инициализация UI главного меню...");
+
+        // Находим все элементы UI
+        FindAllUIElements();
+
+        // Настраиваем кнопки
+        SetupUI();
+
+        // Обновляем статус авторизации
+        UpdateAuthStatus();
+
+        // Показываем форму входа по умолчанию
+        ShowLoginFields();
+
+        // Активируем кнопку старта если нужно
+        if (startGameButton != null)
+        {
+            startGameButton.interactable = FirebaseRestManager.Instance != null &&
+                                           FirebaseRestManager.Instance.IsAuthenticated &&
+                                           PlayerPrefs.GetInt("HasCompletedTutorial", 0) == 1;
+        }
+
+        uiInitialized = true;
+        Debug.Log("✅ UI главного меню инициализирован");
+    }
+
+    // === ПЕРЕПОДКЛЮЧЕНИЕ ССЫЛОК ПРИ ПОВТОРНОЙ ЗАГРУЗКЕ ===
+    private void ReconnectUIReferences()
+    {
+        Debug.Log("🔌 Переподключение UI ссылок...");
+
+        // Находим элементы заново
+        FindAllUIElements();
+
+        // Переподписываем события кнопок
+        ReconnectButtonListeners();
+
+        // Обновляем состояние
+        UpdateAuthStatus();
+
+        Debug.Log("✅ UI ссылки восстановлены");
+    }
+
+    // === ПОИСК ВСЕХ UI ЭЛЕМЕНТОВ ===
+    private void FindAllUIElements()
+    {
+        // Находим Canvas
+        GameObject canvas = GameObject.Find("MainMenuCanvas");
+        if (canvas == null)
+        {
+            Debug.LogError("❌ Canvas 'MainMenuCanvas' не найден!");
+            return;
+        }
+
+        // === ПОИСК ПАНЕЛЕЙ ===
+        helpPanel = FindChild(canvas.transform, "HelpPanel");
+        accountPanel = FindChild(canvas.transform, "AccountPanel");
+        statsPanel = FindChild(canvas.transform, "StatsPanel");
+        tutorialOfferPanelAfterRegister = FindChild(canvas.transform, "TutorPanel2");
+        tutorialOfferPanelAfterLogin = FindChild(canvas.transform, "TutorPanel1");
+        settingsPanel = FindChild(canvas.transform, "SettingsPanel"); // Ищем панель настроек
+
+        // === ПОИСК ЭЛЕМЕНТОВ НАСТРОЕК ===
+        if (settingsPanel != null)
+        {
+            masterVolumeSlider = FindChild(settingsPanel.transform, "MasterVolumeSlider")?.GetComponent<Slider>();
+            musicVolumeSlider = FindChild(settingsPanel.transform, "MusicVolumeSlider")?.GetComponent<Slider>();
+            sfxVolumeSlider = FindChild(settingsPanel.transform, "SFXVolumeSlider")?.GetComponent<Slider>();
+            fullscreenToggle = FindChild(settingsPanel.transform, "FullscreenToggle")?.GetComponent<Toggle>();
+            resolutionDropdown = FindChild(settingsPanel.transform, "ResolutionDropdown")?.GetComponent<TMP_Dropdown>();
+            settingsApplyButton = FindChild(settingsPanel.transform, "ApplyButton")?.GetComponent<Button>();
+            settingsCloseButton = FindChild(settingsPanel.transform, "CloseButton")?.GetComponent<Button>();
+        }
+
+        // === ПОИСК ИНФО-ПАНЕЛЕЙ ===
+        controlsInfo = FindChild(helpPanel?.transform, "ControlsInfo");
+        abilityInfo = FindChild(helpPanel?.transform, "AbilityInfo");
+        enemiesInfo = FindChild(helpPanel?.transform, "EnemiesInfo");
+        contactsInfo = FindChild(helpPanel?.transform, "ContactsInfo");
+
+        // === ПОИСК ПОЛЕЙ ВВОДА ===
+        loginFields = FindChild(canvas.transform, "LoginFields");
+        registerFields = FindChild(canvas.transform, "RegisterFields");
+
+        // Поля входа
+        if (loginFields != null)
+        {
+            loginEmailInput = FindChild(loginFields.transform, "EmailInputField")?.GetComponent<TMP_InputField>();
+            loginPasswordInput = FindChild(loginFields.transform, "PasswordInputField")?.GetComponent<TMP_InputField>();
+            submitLoginButton = FindChild(loginFields.transform, "LoginButton")?.GetComponent<Button>();
+        }
+
+        // Поля регистрации
+        if (registerFields != null)
+        {
+            registerEmailInput = FindChild(registerFields.transform, "EmailInputField")?.GetComponent<TMP_InputField>();
+            registerPasswordInput = FindChild(registerFields.transform, "PasswordInputField")?.GetComponent<TMP_InputField>();
+            registerPasswordRepInput = FindChild(registerFields.transform, "PasswordInputFieldRep")?.GetComponent<TMP_InputField>();
+            submitRegisterButton = FindChild(registerFields.transform, "RegisterButton")?.GetComponent<Button>();
+        }
+
+        // === ПОИСК ТЕКСТОВЫХ ПОЛЕЙ ===
+        authStatusText = FindChild(canvas.transform, "AuthStatusText")?.GetComponent<TextMeshProUGUI>();
+        statsContent = FindChild(canvas.transform, "StatsContent")?.GetComponent<TextMeshProUGUI>();
+
+        // === ПОИСК КНОПОК ГЛАВНОГО МЕНЮ ===
+        startGameButton = FindChild(canvas.transform, "StartGame")?.GetComponent<Button>();
+        helpButton = FindChild(canvas.transform, "Help")?.GetComponent<Button>();
+        accountButton = FindChild(canvas.transform, "Account")?.GetComponent<Button>();
+
+        // === ПОИСК КНОПОК В ПАНЕЛЯХ ===
+        // В AccountPanel
+        loginButton = FindChild(accountPanel?.transform, "LoginButton")?.GetComponent<Button>();
+        registerButton = FindChild(accountPanel?.transform, "RegisterButton")?.GetComponent<Button>();
+        viewStatsButton = FindChild(accountPanel?.transform, "Stats")?.GetComponent<Button>();
+        backToMenuButton = FindChild(accountPanel?.transform, "BackToMenuButton")?.GetComponent<Button>();
+
+        // В HelpPanel
+        controlsButton = FindChild(helpPanel?.transform, "ControlsButton")?.GetComponent<Button>();
+        abilitiesButton = FindChild(helpPanel?.transform, "AbilitiesButton")?.GetComponent<Button>();
+        enemiesButton = FindChild(helpPanel?.transform, "EnemiesButton")?.GetComponent<Button>();
+        contactsButton = FindChild(helpPanel?.transform, "SupportButton")?.GetComponent<Button>();
+        helpExitButton = FindChild(helpPanel?.transform, "Exit")?.GetComponent<Button>();
+
+        // В StatsPanel
+        backFromStatsButton = FindChild(statsPanel?.transform, "BackFromStatsButton")?.GetComponent<Button>();
+
+        // В панелях туториала
+        if (tutorialOfferPanelAfterRegister != null)
+        {
+            startTutorialFromRegisterButton = FindChild(tutorialOfferPanelAfterRegister.transform, "Yes")?.GetComponent<Button>();
+            skipTutorialButton = FindChild(tutorialOfferPanelAfterRegister.transform, "No")?.GetComponent<Button>();
+        }
+
+        if (tutorialOfferPanelAfterLogin != null)
+        {
+            startTutorialFromLoginButton = FindChild(tutorialOfferPanelAfterLogin.transform, "Yes")?.GetComponent<Button>();
+            if (skipTutorialButton == null)
+                skipTutorialButton = FindChild(tutorialOfferPanelAfterLogin.transform, "No")?.GetComponent<Button>();
+        }
+
+        // === ДОПОЛНИТЕЛЬНЫЕ КНОПКИ ===
+        exitGameButton = FindChild(canvas.transform, "ExitGameButton")?.GetComponent<Button>();
+        settingsButton = FindChild(canvas.transform, "SettingsButton")?.GetComponent<Button>();
+
+        // Отладочные сообщения
+        Debug.Log($"Settings panel found: {settingsPanel != null}");
+        Debug.Log($"Exit button found: {exitGameButton != null}");
+        Debug.Log($"Settings button found: {settingsButton != null}");
+
+        Debug.Log($"✅ Найдены UI элементы: Панели={helpPanel != null}, Кнопки={startGameButton != null}");
+    }
+
+    // === ВСПОМОГАТЕЛЬНЫЙ МЕТОД ДЛЯ ПОИСКА ДОЧЕРНИХ ОБЪЕКТОВ ===
+    private GameObject FindChild(Transform parent, string childName)
+    {
+        if (parent == null) return null;
+
+        foreach (Transform child in parent)
+        {
+            if (child.name == childName)
+                return child.gameObject;
+
+            // Рекурсивный поиск
+            GameObject found = FindChild(child, childName);
+            if (found != null)
+                return found;
+        }
+
+        return null;
+    }
+
+    // === НАСТРОЙКА КНОПОК И СОБЫТИЙ ===
+    private void SetupUI()
+    {
+        // Удаляем старые обработчики
+        RemoveAllButtonListeners();
+
         // Главное меню
         if (startGameButton != null) startGameButton.onClick.AddListener(OnStartGame);
         if (helpButton != null) helpButton.onClick.AddListener(ShowHelpPanel);
@@ -87,7 +451,7 @@ public class MainMenuManager : MonoBehaviour
         if (submitLoginButton != null) submitLoginButton.onClick.AddListener(OnLogin);
         if (submitRegisterButton != null) submitRegisterButton.onClick.AddListener(OnRegister);
 
-        // Кнопки в HelpPanel
+        // Help Panel навигация
         if (controlsButton != null) controlsButton.onClick.AddListener(() => ShowHelpSection(controlsInfo));
         if (abilitiesButton != null) abilitiesButton.onClick.AddListener(() => ShowHelpSection(abilityInfo));
         if (enemiesButton != null) enemiesButton.onClick.AddListener(() => ShowHelpSection(enemiesInfo));
@@ -96,57 +460,201 @@ public class MainMenuManager : MonoBehaviour
 
         // Кнопки "Назад"
         if (backFromStatsButton != null) backFromStatsButton.onClick.AddListener(HideStatsPanel);
-    }
 
-    // === УПРАВЛЕНИЕ КНОПКАМИ ГЛАВНОГО МЕНЮ ===
-    void DisableMainButtons()
-    {
-        if (startGameButton != null) startGameButton.interactable = false;
-        if (helpButton != null) helpButton.interactable = false;
-        if (accountButton != null) accountButton.interactable = false;
-    }
+        // Кнопки туториала
+        if (startTutorialFromRegisterButton != null) startTutorialFromRegisterButton.onClick.AddListener(StartTutorialAfterRegister);
+        if (startTutorialFromLoginButton != null) startTutorialFromLoginButton.onClick.AddListener(StartTutorialAfterLogin);
+        if (skipTutorialButton != null) skipTutorialButton.onClick.AddListener(SkipTutorial);
 
-    void EnableMainButtons()
-    {
-        if (startGameButton != null) startGameButton.interactable = true;
-        if (helpButton != null) helpButton.interactable = true;
-        if (accountButton != null) accountButton.interactable = true;
-    }
-
-    // === ПАНЕЛЬ ПОМОЩИ ===
-    public void ShowHelpPanel()
-    {
-        helpPanel.SetActive(true);
-        DisableMainButtons();
-
-        // Показываем первую секцию по умолчанию
-        if (controlsInfo != null)
+        // Кнопка выхода из игры
+        if (exitGameButton != null)
         {
-            ShowHelpSection(controlsInfo);
+            exitGameButton.onClick.RemoveAllListeners();
+            exitGameButton.onClick.AddListener(ExitGame);
+            exitGameButton.onClick.AddListener(() => Debug.Log("Exit button clicked!"));
+            Debug.Log("✅ Exit button listeners added");
         }
         else
         {
-            HideAllHelpSections();
+            Debug.LogError("❌ Exit button is null!");
+        }
+
+        // Кнопка настроек
+        if (settingsButton != null)
+        {
+            settingsButton.onClick.RemoveAllListeners();
+            settingsButton.onClick.AddListener(ShowSettings);
+            settingsButton.onClick.AddListener(() => Debug.Log("Settings button clicked!"));
+            Debug.Log("✅ Settings button listeners added");
+        }
+        else
+        {
+            Debug.LogError("❌ Settings button is null!");
+        }
+
+        // Настройки элементов панели настроек
+        SetupSettingsUI();
+    }
+
+    // === НАСТРОЙКА ЭЛЕМЕНТОВ НАСТРОЕК ===
+    private void SetupSettingsUI()
+    {
+        // Слайдеры громкости
+        if (masterVolumeSlider != null)
+        {
+            masterVolumeSlider.onValueChanged.AddListener(SetMasterVolume);
+        }
+
+        if (musicVolumeSlider != null)
+        {
+            musicVolumeSlider.onValueChanged.AddListener(SetMusicVolume);
+        }
+
+        if (sfxVolumeSlider != null)
+        {
+            sfxVolumeSlider.onValueChanged.AddListener(SetSFXVolume);
+        }
+
+        // Переключатель полноэкранного режима
+        if (fullscreenToggle != null)
+        {
+            fullscreenToggle.onValueChanged.AddListener(SetFullscreen);
+        }
+
+        // Кнопка применения настроек
+        if (settingsApplyButton != null)
+        {
+            settingsApplyButton.onClick.AddListener(ApplySettings);
+        }
+
+        // Кнопка закрытия настроек
+        if (settingsCloseButton != null)
+        {
+            settingsCloseButton.onClick.AddListener(HideSettings);
+        }
+    }
+
+    // === МЕТОДЫ ДЛЯ НАСТРОЕК ===
+    void SetMasterVolume(float volume)
+    {
+        AudioListener.volume = volume;
+        Debug.Log($"Master volume: {volume}");
+    }
+
+    void SetMusicVolume(float volume)
+    {
+        if (backgroundMusic != null)
+            backgroundMusic.volume = volume;
+        Debug.Log($"Music volume: {volume}");
+    }
+
+    void SetSFXVolume(float volume)
+    {
+        if (sfxSources != null && sfxSources.Length > 0)
+        {
+            foreach (AudioSource sfx in sfxSources)
+            {
+                if (sfx != null)
+                    sfx.volume = volume;
+            }
+        }
+        Debug.Log($"SFX volume: {volume}");
+    }
+
+    void SetFullscreen(bool isFullscreen)
+    {
+        Screen.fullScreen = isFullscreen;
+        Debug.Log($"Fullscreen: {isFullscreen}");
+    }
+
+    void ApplySettings()
+    {
+        // Применяем разрешение
+        if (resolutionDropdown != null && resolutionDropdown.value < availableResolutions.Length)
+        {
+            Resolution selectedRes = availableResolutions[resolutionDropdown.value];
+            Screen.SetResolution(selectedRes.width, selectedRes.height, Screen.fullScreen);
+            Debug.Log($"Resolution set to: {selectedRes.width}x{selectedRes.height}");
+        }
+
+        // Сохраняем настройки
+        SaveSettings();
+
+        // Закрываем панель
+        HideSettings();
+
+        // Воспроизводим звук подтверждения
+        PlayApplySound();
+    }
+
+    void PlayApplySound()
+    {
+        if (sfxSources != null && sfxSources.Length > 0 && sfxSources[0] != null)
+        {
+            sfxSources[0].Play();
+        }
+    }
+
+    // === ПЕРЕПОДКЛЮЧЕНИЕ СОБЫТИЙ КНОПОК ===
+    private void ReconnectButtonListeners()
+    {
+        // Удаляем все старые обработчики
+        RemoveAllButtonListeners();
+
+        // Добавляем новые
+        SetupUI();
+    }
+
+    // === УДАЛЕНИЕ ВСЕХ ОБРАБОТЧИКОВ СОБЫТИЙ ===
+    private void RemoveAllButtonListeners()
+    {
+        Button[] allButtons = GetComponentsInChildren<Button>(true);
+        foreach (Button btn in allButtons)
+        {
+            btn.onClick.RemoveAllListeners();
+        }
+    }
+
+    // === СКРЫТИЕ ВСЕХ ПАНЕЛЕЙ ===
+    private void HideAllUIPanels()
+    {
+        if (helpPanel != null) helpPanel.SetActive(false);
+        if (accountPanel != null) accountPanel.SetActive(false);
+        if (statsPanel != null) statsPanel.SetActive(false);
+        if (tutorialOfferPanelAfterRegister != null) tutorialOfferPanelAfterRegister.SetActive(false);
+        if (tutorialOfferPanelAfterLogin != null) tutorialOfferPanelAfterLogin.SetActive(false);
+        if (settingsPanel != null) settingsPanel.SetActive(false); // Скрываем и настройки
+
+        HideAllHelpSections();
+    }
+
+    // === МЕТОДЫ УПРАВЛЕНИЯ UI ===
+    public void ShowHelpPanel()
+    {
+        if (helpPanel != null)
+        {
+            helpPanel.SetActive(true);
+            DisableMainButtons();
+            ShowHelpSection(controlsInfo);
         }
     }
 
     public void HideHelpPanel()
     {
-        helpPanel.SetActive(false);
-        EnableMainButtons();
-        HideAllHelpSections();
-        currentHelpSection = null;
+        if (helpPanel != null)
+        {
+            helpPanel.SetActive(false);
+            EnableMainButtons();
+            HideAllHelpSections();
+            currentHelpSection = null;
+        }
     }
 
     void ShowHelpSection(GameObject section)
     {
-        // Сначала скрываем ВСЕ секции
         HideAllHelpSections();
-
-        // Затем показываем нужную
         if (section != null)
         {
-            Debug.Log($"Показываем секцию: {section.name}");
             section.SetActive(true);
             currentHelpSection = section;
         }
@@ -154,29 +662,32 @@ public class MainMenuManager : MonoBehaviour
 
     void HideAllHelpSections()
     {
-        // Явно скрываем КАЖДУЮ секцию
         if (controlsInfo != null) controlsInfo.SetActive(false);
         if (abilityInfo != null) abilityInfo.SetActive(false);
         if (enemiesInfo != null) enemiesInfo.SetActive(false);
         if (contactsInfo != null) contactsInfo.SetActive(false);
     }
 
-    // === ПАНЕЛЬ АККАУНТА ===
     public void ShowAccountPanel()
     {
-        accountPanel.SetActive(true);
-        DisableMainButtons();
-        UpdateAuthStatus();
-        ShowLoginFields(); // Показываем форму входа при открытии панели
+        if (accountPanel != null)
+        {
+            accountPanel.SetActive(true);
+            DisableMainButtons();
+            UpdateAuthStatus();
+            ShowLoginFields();
+        }
     }
 
     public void HideAccountPanel()
     {
-        accountPanel.SetActive(false);
-        EnableMainButtons();
+        if (accountPanel != null)
+        {
+            accountPanel.SetActive(false);
+            EnableMainButtons();
+        }
     }
 
-    // === ФОРМЫ ВХОДА И РЕГИСТРАЦИИ ===
     public void ShowLoginFields()
     {
         if (loginFields != null) loginFields.SetActive(true);
@@ -189,21 +700,80 @@ public class MainMenuManager : MonoBehaviour
         if (registerFields != null) registerFields.SetActive(true);
     }
 
-    // === ПАНЕЛЬ СТАТИСТИКИ ===
     public void ShowStatsPanel()
     {
-        statsPanel.SetActive(true);
-        DisableMainButtons();
-        UpdateStatsContent();
+        if (statsPanel != null)
+        {
+            statsPanel.SetActive(true);
+            DisableMainButtons();
+            UpdateStatsContent();
+        }
     }
 
     public void HideStatsPanel()
     {
-        statsPanel.SetActive(false);
-        EnableMainButtons();
+        if (statsPanel != null)
+        {
+            statsPanel.SetActive(false);
+            EnableMainButtons();
+        }
     }
 
-    // === ОСНОВНЫЕ ДЕЙСТВИЯ ===
+    // === ПАНЕЛЬ НАСТРОЕК ===
+    public void ShowSettings()
+    {
+        if (settingsPanel != null)
+        {
+            settingsPanel.SetActive(true);
+            DisableMainButtons();
+            Debug.Log("✅ Settings panel opened");
+        }
+        else
+        {
+            Debug.LogError("❌ Settings panel is null!");
+
+            // Пробуем найти
+            GameObject canvas = GameObject.Find("MainMenuCanvas");
+            if (canvas != null)
+            {
+                settingsPanel = FindChild(canvas.transform, "SettingsPanel");
+                if (settingsPanel != null)
+                {
+                    settingsPanel.SetActive(true);
+                    DisableMainButtons();
+                    Debug.Log("✅ Settings panel found and opened");
+                }
+            }
+        }
+    }
+
+    public void HideSettings()
+    {
+        if (settingsPanel != null)
+        {
+            settingsPanel.SetActive(false);
+            EnableMainButtons();
+            Debug.Log("Settings panel closed");
+        }
+    }
+
+    void DisableMainButtons()
+    {
+        if (startGameButton != null) startGameButton.interactable = false;
+        if (helpButton != null) helpButton.interactable = false;
+        if (accountButton != null) accountButton.interactable = false;
+        if (settingsButton != null) settingsButton.interactable = false;
+    }
+
+    void EnableMainButtons()
+    {
+        if (startGameButton != null) startGameButton.interactable = true;
+        if (helpButton != null) helpButton.interactable = true;
+        if (accountButton != null) accountButton.interactable = true;
+        if (settingsButton != null) settingsButton.interactable = true;
+    }
+
+    // === ОСНОВНЫЕ МЕТОДЫ ===
     void OnStartGame()
     {
         if (FirebaseRestManager.Instance != null && FirebaseRestManager.Instance.IsAuthenticated)
@@ -215,7 +785,7 @@ public class MainMenuManager : MonoBehaviour
             }
             else
             {
-                StartNewGame();
+                SceneManager.LoadScene("Level_1");
             }
         }
         else
@@ -229,12 +799,13 @@ public class MainMenuManager : MonoBehaviour
         string email = loginEmailInput?.text ?? "";
         string password = loginPasswordInput?.text ?? "";
 
-        Debug.Log($"Вход: email='{email}', password='{password}'");
-
         if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(password))
         {
-            authStatusText.text = "Заполните email и пароль";
-            authStatusText.color = Color.red;
+            if (authStatusText != null)
+            {
+                authStatusText.text = "Заполните email и пароль";
+                authStatusText.color = Color.red;
+            }
             return;
         }
 
@@ -243,23 +814,32 @@ public class MainMenuManager : MonoBehaviour
                 PlayerPrefs.SetString("PlayerEmail", email);
                 PlayerPrefs.Save();
                 UpdateAuthStatus();
-                UpdateStatsContent();
-
-                bool hasTutorial = PlayerPrefs.GetInt("HasCompletedTutorial", 0) == 1;
-                if (!hasTutorial)
-                {
-                    ShowTutorialPrompt();
-                }
-                else
-                {
-                    HideAccountPanel();
-                }
+                LoadAllLevelProgressFromFirebase();
+                ShowTutorialOfferAfterLogin();
             },
             (error) => {
-                authStatusText.text = $"Ошибка входа: {error}";
-                authStatusText.color = Color.red;
+                if (authStatusText != null)
+                {
+                    authStatusText.text = $"Ошибка входа: {error}";
+                    authStatusText.color = Color.red;
+                }
             }
         );
+    }
+
+    void LoadAllLevelProgressFromFirebase()
+    {
+        if (!FirebaseRestManager.Instance.IsAuthenticated) return;
+
+        for (int level = 1; level <= 5; level++)
+        {
+            FirebaseRestManager.Instance.LoadLevelProgress(level, (coins, time) => {
+                PlayerPrefs.SetInt($"Level{level}_Coins", coins);
+                PlayerPrefs.SetFloat($"Level{level}_Time", time);
+                PlayerPrefs.Save();
+                UpdateStatsContent();
+            });
+        }
     }
 
     void OnRegister()
@@ -268,19 +848,23 @@ public class MainMenuManager : MonoBehaviour
         string password = registerPasswordInput?.text ?? "";
         string passwordRep = registerPasswordRepInput?.text ?? "";
 
-        Debug.Log($"Регистрация: email='{email}', password='{password}', confirm='{passwordRep}'");
-
         if (string.IsNullOrEmpty(email) || password.Length < 6)
         {
-            authStatusText.text = "Пароль должен быть минимум 6 символов";
-            authStatusText.color = Color.red;
+            if (authStatusText != null)
+            {
+                authStatusText.text = "Пароль должен быть минимум 6 символов";
+                authStatusText.color = Color.red;
+            }
             return;
         }
 
         if (password != passwordRep)
         {
-            authStatusText.text = "Пароли не совпадают";
-            authStatusText.color = Color.red;
+            if (authStatusText != null)
+            {
+                authStatusText.text = "Пароли не совпадают";
+                authStatusText.color = Color.red;
+            }
             return;
         }
 
@@ -289,11 +873,15 @@ public class MainMenuManager : MonoBehaviour
                 PlayerPrefs.SetString("PlayerEmail", email);
                 PlayerPrefs.SetInt("HasCompletedTutorial", 0);
                 PlayerPrefs.Save();
-                LoadScene("Tutorial");
+                UpdateAuthStatus();
+                ShowTutorialOfferAfterRegister();
             },
             (error) => {
-                authStatusText.text = $"Ошибка регистрации: {error}";
-                authStatusText.color = Color.red;
+                if (authStatusText != null)
+                {
+                    authStatusText.text = $"Ошибка регистрации: {error}";
+                    authStatusText.color = Color.red;
+                }
             }
         );
     }
@@ -306,24 +894,21 @@ public class MainMenuManager : MonoBehaviour
         }
         else
         {
-            authStatusText.text = "Сначала войдите в аккаунт";
-            authStatusText.color = Color.red;
+            if (authStatusText != null)
+            {
+                authStatusText.text = "Сначала войдите в аккаунт";
+                authStatusText.color = Color.red;
+            }
         }
     }
 
-    // === СТАТИСТИКА ===
     void UpdateStatsContent()
     {
-        if (statsContent == null)
-        {
-            Debug.LogError("statsContent не назначен в инспекторе!");
-            return;
-        }
+        if (statsContent == null) return;
 
         StringBuilder sb = new StringBuilder();
-        sb.AppendLine("<b><color=#33ccff>ЛИЧНАЯ СТАТИСТИКА</color></b>\n");
-
         bool hasAnyData = false;
+
         for (int level = 1; level <= 5; level++)
         {
             int coins = PlayerPrefs.GetInt($"Level{level}_Coins", 0);
@@ -350,53 +935,107 @@ public class MainMenuManager : MonoBehaviour
         statsContent.text = sb.ToString();
     }
 
-    // === АВТОРИЗАЦИЯ ===
+    void ShowTutorialOfferAfterRegister()
+    {
+        HideAccountPanel();
+        if (tutorialOfferPanelAfterRegister != null)
+        {
+            tutorialOfferPanelAfterRegister.SetActive(true);
+            DisableMainButtons();
+        }
+    }
+
+    void ShowTutorialOfferAfterLogin()
+    {
+        HideAccountPanel();
+        if (tutorialOfferPanelAfterLogin != null)
+        {
+            tutorialOfferPanelAfterLogin.SetActive(true);
+            DisableMainButtons();
+        }
+    }
+
+    void StartTutorialAfterRegister()
+    {
+        CloseTutorialPanels();
+        LoadScene("Tutorial");
+    }
+
+    void StartTutorialAfterLogin()
+    {
+        CloseTutorialPanels();
+        LoadScene("Tutorial");
+    }
+
+    void SkipTutorial()
+    {
+        PlayerPrefs.SetInt("HasCompletedTutorial", 1);
+        PlayerPrefs.Save();
+        CloseTutorialPanels();
+        EnableStartGameButton();
+    }
+
+    void CloseTutorialPanels()
+    {
+        if (tutorialOfferPanelAfterRegister != null) tutorialOfferPanelAfterRegister.SetActive(false);
+        if (tutorialOfferPanelAfterLogin != null) tutorialOfferPanelAfterLogin.SetActive(false);
+        EnableMainButtons();
+    }
+
+    void EnableStartGameButton()
+    {
+        if (startGameButton != null)
+        {
+            startGameButton.interactable = true;
+            isPlayerButtonEnabled = true;
+        }
+    }
+
+    void ExitGame()
+    {
+        Debug.Log("🛑 ExitGame вызван!");
+
+        // Сохраняем все данные перед выходом
+        PlayerPrefs.Save();
+
+#if UNITY_EDITOR
+        Debug.Log("✅ Выход из игры в редакторе Unity");
+        UnityEditor.EditorApplication.isPlaying = false;
+#else
+            Debug.Log("✅ Выход из приложения");
+            Application.Quit();
+#endif
+    }
+
+    public void ReturnToMainMenuAfterTutorial()
+    {
+        PlayerPrefs.SetInt("HasCompletedTutorial", 1);
+        PlayerPrefs.Save();
+        SceneManager.LoadScene("MainMenu");
+    }
+
     void UpdateAuthStatus()
     {
-        if (FirebaseRestManager.Instance == null)
-        {
-            if (authStatusText != null)
-                authStatusText.text = "Firebase не готов";
-            return;
-        }
-
-        if (authStatusText == null) return;
+        if (FirebaseRestManager.Instance == null || authStatusText == null) return;
 
         if (FirebaseRestManager.Instance.IsAuthenticated)
         {
             string email = PlayerPrefs.GetString("PlayerEmail", "user");
             authStatusText.text = $"Авторизован: {email}";
             authStatusText.color = new Color(0.2f, 1f, 0.4f);
-            if (viewStatsButton != null)
-            {
-                viewStatsButton.interactable = true;
-            }
+            if (viewStatsButton != null) viewStatsButton.interactable = true;
         }
         else
         {
             authStatusText.text = "Не авторизован";
             authStatusText.color = Color.red;
-            if (viewStatsButton != null)
-            {
-                viewStatsButton.interactable = false;
-            }
+            if (viewStatsButton != null) viewStatsButton.interactable = false;
         }
     }
 
-    // === ОБУЧЕНИЕ И ЗАГРУЗКА ===
     void ShowTutorialPrompt()
     {
         LoadScene("Tutorial");
-    }
-
-    void StartNewGame()
-    {
-        PlayerPrefs.DeleteKey("CurrentLevel");
-        PlayerPrefs.DeleteKey("CoinsCollected");
-        PlayerPrefs.DeleteKey("DataPackets");
-        PlayerPrefs.SetInt("HasCompletedTutorial", 1);
-        PlayerPrefs.Save();
-        LoadScene("Level_1");
     }
 
     void LoadScene(string sceneName)
@@ -405,15 +1044,7 @@ public class MainMenuManager : MonoBehaviour
         {
             AudioManager.Instance.StopMusic();
         }
-
-        if (sceneName == "Level_1" || sceneName == "Tutorial")
-        {
-            SceneManager.LoadScene(sceneName);
-        }
-        else
-        {
-            Debug.LogError($"Сцена '{sceneName}' не добавлена в Build Settings!");
-        }
+        SceneManager.LoadScene(sceneName);
     }
 
     string FormatTime(float timeInSeconds)
@@ -422,5 +1053,11 @@ public class MainMenuManager : MonoBehaviour
         int minutes = Mathf.FloorToInt(timeInSeconds / 60f);
         int seconds = Mathf.FloorToInt(timeInSeconds % 60f);
         return $"{minutes:00}:{seconds:00}";
+    }
+
+    // === ОЧИСТКА ПРИ УНИЧТОЖЕНИИ ===
+    void OnDestroy()
+    {
+        SceneManager.sceneLoaded -= OnSceneLoaded;
     }
 }

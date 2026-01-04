@@ -2,6 +2,7 @@
 using UnityEngine.SceneManagement;
 using System.Collections;
 using System.Collections.Generic;
+using UnityEngine.UI;
 
 public class GameManager : MonoBehaviour
 {
@@ -10,9 +11,18 @@ public class GameManager : MonoBehaviour
     {
         get
         {
-            if (_instance == null || _instance.gameObject == null)
+            if (_instance == null)
             {
-                _instance = null;
+                // Ищем существующий GameManager в сцене
+                _instance = FindFirstObjectByType<GameManager>();
+
+                // Если не нашли, создаем новый
+                if (_instance == null)
+                {
+                    GameObject gm = new GameObject("GameManager");
+                    _instance = gm.AddComponent<GameManager>();
+                    DontDestroyOnLoad(gm);
+                }
             }
             return _instance;
         }
@@ -32,49 +42,189 @@ public class GameManager : MonoBehaviour
 
     [Header("=== СБОР ПРЕДМЕТОВ ===")]
     public int dataPacketsCollected = 0;
-    public int coinsCollected = 0; // ← МОНЕТЫ ДОБАВЛЕНЫ
+    public int coinsCollected = 0;
     public int enemiesDestroyed = 0;
 
     [Header("=== СТАТИСТИКА И РЕКОРДЫ ===")]
     public float bestCompletionTime = Mathf.Infinity;
     public int totalSessionsPlayed = 0;
 
-    [Header("=== СИСТЕМА ДОСТИЖЕНИЙ ===")]
-    public List<Achievement> achievements = new List<Achievement>();
+    private bool isInitialized = false;
+    private Coroutine restartCoroutine;
 
-    public System.Action OnGamePause;
-    public System.Action OnGameResume;
-    public System.Action OnGameOver;
-    public System.Action OnLevelComplete;
-    public System.Action OnDataPacketCollected;
-    public System.Action OnEnemyDestroyed;
-    public System.Action OnCoinCollected;
+    // === ВАЖНО: Ссылка на префаб UIManager ===
+    public GameObject uiManagerPrefab; // Перетащите префаб сюда в инспекторе
 
     void Awake()
     {
-        if (_instance != null && _instance.gameObject != null)
+        // Если уже есть Instance и это не мы
+        if (_instance != null && _instance != this)
         {
+            Debug.Log("⚠️ Уничтожен дубликат GameManager");
             Destroy(gameObject);
             return;
         }
 
-        _instance = this;
-        DontDestroyOnLoad(gameObject);
-        InitializeGameSystems();
-        Debug.Log("🎮 GameManager инициализирован");
+        // Если Instance еще нет
+        if (_instance == null)
+        {
+            _instance = this;
+            DontDestroyOnLoad(gameObject);
+
+            // Инициализируем только один раз
+            if (!isInitialized)
+            {
+                InitializeGameSystems();
+                isInitialized = true;
+            }
+
+            // Подписываемся на события
+            SceneManager.sceneLoaded += OnSceneLoaded;
+            Debug.Log("✅ GameManager инициализирован как постоянный объект");
+        }
     }
 
     void InitializeGameSystems()
     {
         currentLives = totalLives;
         sessionTimer = 0f;
-
-        // LoadAllPlayerData();
-
         coinsCollected = 0;
         dataPacketsCollected = 0;
+        enemiesDestroyed = 0;
 
-        InitializeHighScores();
+        Debug.Log("🎮 Игровые системы инициализированы");
+    }
+
+    void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        Debug.Log($"🔄 GameManager: Загружена сцена '{scene.name}'");
+
+        // При загрузке игровой сцены сбрасываем состояние
+        if (scene.name.StartsWith("Level_") || scene.name == "Tutorial")
+        {
+            // Гарантируем что UIManager существует
+            EnsureUIManagerExists();
+
+            // Даем время на инициализацию
+            StartCoroutine(ResetLevelAfterDelay());
+        }
+    }
+
+    IEnumerator ResetLevelAfterDelay()
+    {
+        yield return new WaitForSeconds(0.1f);
+        ResetLevelState();
+    }
+
+    // === ВАЖНЫЙ МЕТОД: Гарантируем существование UIManager ===
+    void EnsureUIManagerExists()
+    {
+        Debug.Log("🔍 Проверяем UIManager...");
+
+        // Если UIManager уже существует
+        if (UIManager.Instance != null)
+        {
+            Debug.Log("✅ UIManager уже существует");
+            return;
+        }
+
+        Debug.Log("🔄 UIManager не найден, создаем...");
+
+        // Способ 1: Используем префаб из инспектора
+        if (uiManagerPrefab != null)
+        {
+            Instantiate(uiManagerPrefab);
+            Debug.Log("✅ UIManager создан из префаба");
+        }
+        else
+        {
+            // Способ 2: Ищем в Resources
+            GameObject prefab = Resources.Load<GameObject>("UIManager");
+            if (prefab != null)
+            {
+                Instantiate(prefab);
+                Debug.Log("✅ UIManager создан из Resources");
+            }
+            else
+            {
+                // Способ 3: Создаем вручную
+                Debug.Log("⚠️ Создаем UIManager вручную");
+                GameObject uiManagerObj = new GameObject("UIManager");
+                uiManagerObj.AddComponent<UIManager>();
+                DontDestroyOnLoad(uiManagerObj);
+                Debug.Log("✅ UIManager создан вручную");
+            }
+        }
+
+        // Ждем один кадр для инициализации
+        StartCoroutine(WaitForUIManagerInitialization());
+    }
+
+    IEnumerator WaitForUIManagerInitialization()
+    {
+        yield return null; // Ждем один кадр
+
+        if (UIManager.Instance != null)
+        {
+            Debug.Log("✅ UIManager успешно инициализирован");
+        }
+        else
+        {
+            Debug.LogError("❌ UIManager все еще не создан!");
+        }
+    }
+
+    // Сброс состояния уровня при начале игры
+    void ResetLevelState()
+    {
+        Debug.Log("🔄 Сброс состояния уровня...");
+
+        // Останавливаем все корутины
+        if (restartCoroutine != null)
+        {
+            StopCoroutine(restartCoroutine);
+            restartCoroutine = null;
+        }
+
+        // Сбрасываем состояние
+        isGameActive = true;
+        isPaused = false;
+        Time.timeScale = 1f;
+
+        // Сбрасываем сбор предметов
+        coinsCollected = 0;
+        dataPacketsCollected = 0;
+        enemiesDestroyed = 0;
+
+        // Ждем один кадр чтобы все компоненты успели инициализироваться
+        StartCoroutine(ResetPlayerDelayed());
+    }
+
+    private IEnumerator ResetPlayerDelayed()
+    {
+        // Ждем конец кадра
+        yield return null;
+
+        // Ищем и сбрасываем игрока
+        PlayerController player = FindFirstObjectByType<PlayerController>();
+        if (player != null)
+        {
+            player.ResetPlayer();
+        }
+
+        // Обновляем UI (если он уже создан)
+        if (UIManager.Instance != null)
+        {
+            UIManager.Instance.UpdateCoinsUI(coinsCollected);
+            UIManager.Instance.UpdateHealthUI(100);
+            Debug.Log("✅ UI обновлен при старте уровня");
+        }
+        else
+        {
+            Debug.LogWarning("⚠️ UIManager.Instance == null при сбросе уровня");
+        }
+
+        Debug.Log("✅ Состояние уровня сброшено");
     }
 
     void Update()
@@ -99,19 +249,31 @@ public class GameManager : MonoBehaviour
     public void TogglePause()
     {
         isPaused = !isPaused;
-        Time.timeScale = isPaused ? 0 : 1;
 
         if (isPaused)
         {
+            Time.timeScale = 0f;
             OnGamePause?.Invoke();
-            UIManager.Instance?.ShowPauseMenu();
-            AutoSaveProgress();
+
+            // Безопасный вызов ShowPauseMenu
+            if (UIManager.Instance != null)
+            {
+                UIManager.Instance.ShowPauseMenu();
+            }
+            else
+            {
+                Debug.LogWarning("UIManager.Instance is null при паузе");
+            }
         }
         else
         {
+            Time.timeScale = 1f;
             OnGameResume?.Invoke();
-            UIManager.Instance?.HidePauseMenu();
-            SettingsManager.Instance?.CloseSettings();
+
+            if (UIManager.Instance != null)
+            {
+                UIManager.Instance.HidePauseMenu();
+            }
         }
 
         Debug.Log(isPaused ? "⏸ Игра на паузе" : "▶ Игра продолжена");
@@ -120,16 +282,20 @@ public class GameManager : MonoBehaviour
     // === СИСТЕМА УРОВНЕЙ ===
     public void LoadLevel(int levelIndex)
     {
-        // Уничтожаем всех врагов
-        Enemy[] enemies = FindObjectsOfType<Enemy>();
-        foreach (var enemy in enemies)
-            if (enemy != null) Destroy(enemy.gameObject);
+        Debug.Log($"🔄 Загрузка уровня {levelIndex}");
 
-        // Сбрасываем данные уровня
+        // Останавливаем все активные корутины
+        StopAllCoroutines();
+
+        // Сбрасываем состояние
+        currentLevel = levelIndex;
         coinsCollected = 0;
         dataPacketsCollected = 0;
         enemiesDestroyed = 0;
-        currentLevel = levelIndex;
+        sessionTimer = 0f;
+        isGameActive = true;
+        isPaused = false;
+        Time.timeScale = 1f;
 
         // Загружаем сцену
         SceneManager.LoadScene($"Level_{levelIndex}");
@@ -137,7 +303,7 @@ public class GameManager : MonoBehaviour
 
     public void CompleteLevel()
     {
-        Debug.Log($"✅ CompleteLevel вызван. Текущий уровень: {currentLevel}");
+        Debug.Log($"✅ Уровень {currentLevel} завершен!");
 
         if (currentLevel < 5)
         {
@@ -149,52 +315,84 @@ public class GameManager : MonoBehaviour
         }
     }
 
-
     // === СИСТЕМА ЖИЗНЕЙ ===
-    // В GameManager.cs замените PlayerDied():
     public void PlayerDied()
     {
-        Debug.Log("🔥 PlayerDied вызван");
-        isGameActive = false;
-        Time.timeScale = 1f; // ← важно: не оставляйте таймскейл = 0
+        if (!isGameActive) return;
 
-        // Остановить всех врагов, но НЕ перезапускать уровень
+        Debug.Log("💀 GameManager: Игрок умер");
+        isGameActive = false;
+
+        Time.timeScale = 0f;
+
         StopAllEnemiesImmediately();
 
-        // Показать экран смерти
+        ShowDeathScreenImmediate();
+    }
+
+    private void ShowDeathScreenImmediate()
+    {
+        Debug.Log($"📊 Статистика: время={sessionTimer}, монеты={coinsCollected}");
+
+        // ГАРАНТИРУЕМ что UIManager существует
+        EnsureUIManagerExists();
+
         if (UIManager.Instance != null)
         {
+            Debug.Log("✅ UIManager.Instance найден, вызываем ShowDeathScreen");
             UIManager.Instance.ShowDeathScreen(sessionTimer, coinsCollected, dataPacketsCollected);
         }
         else
         {
-            Debug.LogError("❌ UIManager.Instance == null при смерти!");
+            Debug.LogError("❌ UIManager.Instance все еще null!");
+
+            // Создаем простой экран смерти
+            Invoke("CreateSimpleDeathScreen", 0.5f);
         }
     }
 
-    private IEnumerator RestartLevelAfterDelay(float delay)
+    void CreateSimpleDeathScreen()
     {
-        yield return new WaitForSecondsRealtime(delay);
-        Time.timeScale = 1f;
+        // Создаем простой Canvas
+        GameObject canvas = new GameObject("SimpleDeathCanvas");
+        Canvas canvasComp = canvas.AddComponent<Canvas>();
+        canvasComp.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.AddComponent<CanvasScaler>();
+        canvas.AddComponent<GraphicRaycaster>();
 
-        // Уничтожаем врагов
-        var enemies = FindObjectsOfType<Enemy>();
-        foreach (var e in enemies)
-            if (e != null) Destroy(e.gameObject);
+        // Панель
+        GameObject panel = new GameObject("Panel");
+        panel.transform.SetParent(canvas.transform);
+        UnityEngine.UI.Image panelImg = panel.AddComponent<UnityEngine.UI.Image>();
+        panelImg.color = new Color(0, 0, 0, 0.9f);
 
-        // Сбрасываем данные
-        coinsCollected = 0;
-        dataPacketsCollected = 0;
-        enemiesDestroyed = 0;
+        // Текст
+        GameObject textObj = new GameObject("Text");
+        textObj.transform.SetParent(panel.transform);
+        TMPro.TextMeshProUGUI text = textObj.AddComponent<TMPro.TextMeshProUGUI>();
+        text.text = $"ВЫ УМЕРЛИ\n\nНажмите любую кнопку";
+        text.color = Color.red;
+        text.fontSize = 32;
+        text.alignment = TMPro.TextAlignmentOptions.Center;
 
-        // Скрываем экран смерти
-        if (UIManager.Instance != null)
-            UIManager.Instance.HideDeathScreen();
+        // Ждем нажатия
+        StartCoroutine(WaitForRestart(canvas));
+    }
 
-        // 🔥 ПРАВИЛЬНЫЙ ПЕРЕЗАПУСК ТЕКУЩЕГО УРОВНЯ:
-        SceneManager.LoadScene($"Level_{currentLevel}");
+    IEnumerator WaitForRestart(GameObject canvas)
+    {
+        yield return new WaitForSecondsRealtime(0.5f);
 
-        isGameActive = true;
+        while (true)
+        {
+            if (UnityEngine.Input.anyKeyDown)
+            {
+                Destroy(canvas);
+                RestartCurrentLevel();
+                yield break;
+            }
+            yield return null;
+        }
     }
 
     private void StopAllEnemiesImmediately()
@@ -204,71 +402,44 @@ public class GameManager : MonoBehaviour
         {
             if (enemy != null)
             {
-                // Полностью останавливаем врага
                 enemy.StopEnemy();
             }
         }
-
-        // Также останавливаем любые другие движущиеся объекты
-        GameObject[] movingObjects = GameObject.FindGameObjectsWithTag("Enemy");
-        foreach (GameObject obj in movingObjects)
-        {
-            Rigidbody2D rb = obj.GetComponent<Rigidbody2D>();
-            if (rb != null)
-            {
-                rb.linearVelocity = Vector2.zero;
-                rb.simulated = false;
-            }
-        }
-
         Debug.Log("❌ Все враги остановлены");
     }
 
-    private void FreezeAllEnemies(bool freeze)
+    public void RestartCurrentLevel()
     {
-        Enemy[] enemies = FindObjectsOfType<Enemy>();
-        foreach (Enemy enemy in enemies)
+        Debug.Log("🔄 Перезапуск текущего уровня...");
+
+        // Останавливаем все корутины
+        if (restartCoroutine != null)
         {
-            if (enemy != null)
-            {
-                // Отключаем/включаем скрипт врага
-                enemy.enabled = !freeze;
-
-                // Отключаем/включаем Rigidbody
-                Rigidbody2D enemyRb = enemy.GetComponent<Rigidbody2D>();
-                if (enemyRb != null)
-                {
-                    enemyRb.simulated = !freeze;
-                    if (freeze)
-                    {
-                        enemyRb.linearVelocity = Vector2.zero; // Останавливаем движение
-                    }
-                }
-
-                // Если есть аниматор, останавливаем/возобновляем анимации
-                Animator enemyAnimator = enemy.GetComponent<Animator>();
-                if (enemyAnimator != null)
-                {
-                    enemyAnimator.enabled = !freeze;
-                }
-            }
+            StopCoroutine(restartCoroutine);
         }
 
-        Debug.Log(freeze ? "❄ Все враги заморожены" : "✅ Враги разморожены");
+        restartCoroutine = StartCoroutine(RestartLevelCoroutine());
     }
 
-
-    void GameOver(string reason)
+    private IEnumerator RestartLevelCoroutine()
     {
-        isGameActive = false;
-        Debug.Log($"💀 Game Over: {reason}");
-        SaveSessionStats();
-        UIManager.Instance?.ShowGameOverMenu(reason);
-        OnGameOver?.Invoke();
+        // Небольшая задержка перед перезагрузкой
+        yield return new WaitForSecondsRealtime(0.1f);
+
+        Time.timeScale = 1f;
+
+        // Сбрасываем сбор предметов
+        coinsCollected = 0;
+        dataPacketsCollected = 0;
+        enemiesDestroyed = 0;
+
+        // Загружаем сцену заново
+        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
     }
 
     public void WinGame()
     {
+        Debug.Log("🎉 Победа! Все уровни пройдены!");
         isGameActive = false;
 
         if (sessionTimer < bestCompletionTime)
@@ -277,12 +448,10 @@ public class GameManager : MonoBehaviour
             PlayerPrefs.SetFloat("BestCompletionTime", bestCompletionTime);
         }
 
-        SaveSessionStats();
-
         if (UIManager.Instance != null)
+        {
             UIManager.Instance.ShowVictoryScreen(sessionTimer, dataPacketsCollected, enemiesDestroyed);
-
-        Debug.Log("🎉 Победа! Ядро уничтожено!");
+        }
     }
 
     // === СИСТЕМА ДАННЫХ ===
@@ -296,36 +465,12 @@ public class GameManager : MonoBehaviour
     public void CollectCoin(int value = 1)
     {
         coinsCollected += value;
-        Debug.Log($"UIManager.Instance для монет = {(UIManager.Instance != null ? "OK" : "NULL!")}");
-        Debug.Log($"💰 Монета подобрана! Всего: {coinsCollected}");
         OnCoinCollected?.Invoke();
 
-        Debug.Log($"UIManager.Instance = {(UIManager.Instance != null ? "OK" : "NULL!")}");
-
-        // Обновляем UI
         if (UIManager.Instance != null)
         {
             UIManager.Instance.UpdateCoinsUI(coinsCollected);
         }
-
-        if (autoSaveEnabled)
-        {
-            PlayerPrefs.SetInt("CoinsCollected", coinsCollected);
-            PlayerPrefs.Save();
-        }
-    }
-
-    public void RestartCurrentLevel()
-    {
-        coinsCollected = 0;
-        dataPacketsCollected = 0;
-        enemiesDestroyed = 0;
-
-        Time.timeScale = 1f;
-        isGameActive = true;
-        isPaused = false;
-
-        SceneManager.LoadScene($"Level_{currentLevel}");
     }
 
     public void RegisterEnemyDestroyed()
@@ -334,50 +479,58 @@ public class GameManager : MonoBehaviour
         OnEnemyDestroyed?.Invoke();
     }
 
-    // === СИСТЕМА СОХРАНЕНИЙ ===
-    void AutoSaveProgress()
+    // === ВОЗВРАТ В ГЛАВНОЕ МЕНЮ ===
+    public void ReturnToMainMenu()
     {
-        PlayerPrefs.SetInt("CurrentLevel", currentLevel);
-        PlayerPrefs.SetInt("CurrentLives", currentLives);
-        PlayerPrefs.SetFloat("SessionTimer", sessionTimer);
-        PlayerPrefs.SetInt("DataPackets", dataPacketsCollected);
-        PlayerPrefs.SetInt("CoinsCollected", coinsCollected); // ← СОХРАНЯЕМ МОНЕТЫ
+        Debug.Log("🏠 Возврат в главное меню");
+
+        // Останавливаем все корутины
+        StopAllCoroutines();
+
+        // Сбрасываем состояние
+        isGameActive = false;
+        isPaused = false;
+        Time.timeScale = 1f;
+
+        // Загружаем главное меню
+        SceneManager.LoadScene("MainMenu");
+    }
+
+    public void CompleteTutorial()
+    {
+        Debug.Log("✅ Туториал завершен");
+
+        Time.timeScale = 1f;
+        PlayerPrefs.SetInt("HasCompletedTutorial", 1);
         PlayerPrefs.Save();
+
+        // Начинаем с первого уровня
+        LoadLevel(1);
     }
 
-    void LoadAllPlayerData()
+    // === СТАРТ НОВОЙ ИГРЫ ===
+    public void StartNewGame()
     {
-        currentLevel = PlayerPrefs.GetInt("CurrentLevel", 1);
-        currentLives = PlayerPrefs.GetInt("CurrentLives", totalLives);
-        sessionTimer = PlayerPrefs.GetFloat("SessionTimer", 0f);
-        dataPacketsCollected = PlayerPrefs.GetInt("DataPackets", 0);
-        coinsCollected = PlayerPrefs.GetInt("CoinsCollected", 0); // ← ЗАГРУЖАЕМ МОНЕТЫ
-        bestCompletionTime = PlayerPrefs.GetFloat("BestCompletionTime", Mathf.Infinity);
-    }
+        Debug.Log("🚀 Начало новой игры");
 
-    void SaveSessionStats()
-    {
-        int totalPlayTime = PlayerPrefs.GetInt("TotalPlayTime", 0) + (int)sessionTimer;
-        int totalDataPackets = PlayerPrefs.GetInt("TotalDataPackets", 0) + dataPacketsCollected;
-        int totalCoins = PlayerPrefs.GetInt("TotalCoins", 0) + coinsCollected; // ← ОБЩИЕ МОНЕТЫ
-        int totalEnemies = PlayerPrefs.GetInt("TotalEnemies", 0) + enemiesDestroyed;
+        // Сбрасываем весь прогресс
+        PlayerPrefs.DeleteKey("CurrentLevel");
+        PlayerPrefs.DeleteKey("CoinsCollected");
+        PlayerPrefs.DeleteKey("DataPackets");
 
-        PlayerPrefs.SetInt("TotalPlayTime", totalPlayTime);
-        PlayerPrefs.SetInt("TotalDataPackets", totalDataPackets);
-        PlayerPrefs.SetInt("TotalCoins", totalCoins);
-        PlayerPrefs.SetInt("TotalEnemies", totalEnemies);
-        PlayerPrefs.Save();
-    }
+        // Сбрасываем переменные
+        currentLevel = 1;
+        currentLives = totalLives;
+        coinsCollected = 0;
+        dataPacketsCollected = 0;
+        enemiesDestroyed = 0;
+        sessionTimer = 0f;
+        isGameActive = true;
+        isPaused = false;
+        Time.timeScale = 1f;
 
-    // === СИСТЕМА ДОСТИЖЕНИЙ ===
-    void InitializeHighScores()
-    {
-        if (!PlayerPrefs.HasKey("HighScoresInitialized"))
-        {
-            PlayerPrefs.SetString("HighScores", "[]");
-            PlayerPrefs.SetInt("HighScoresInitialized", 1);
-            PlayerPrefs.Save();
-        }
+        // Загружаем первый уровень
+        LoadLevel(1);
     }
 
     // === УТИЛИТЫ ===
@@ -388,45 +541,18 @@ public class GameManager : MonoBehaviour
         return $"{minutes:00}:{seconds:00}";
     }
 
-    public void StartNewGame()
+    // === ОЧИСТКА ПРИ УНИЧТОЖЕНИИ ===
+    void OnDestroy()
     {
-        PlayerPrefs.DeleteKey("CurrentLevel");
-        PlayerPrefs.DeleteKey("CoinsCollected");
-        PlayerPrefs.DeleteKey("DataPackets");
-
-        currentLevel = 1;
-        currentLives = totalLives;
-        coinsCollected = 0;
-        dataPacketsCollected = 0;
-        enemiesDestroyed = 0;
-        sessionTimer = 0f;
-        isGameActive = true;
-        isPaused = false;
-
-        LoadLevel(1);
-    }
-}
-
-[System.Serializable]
-public class Achievement
-{
-    public string id;
-    public string name;
-    public string description;
-    public bool unlocked;
-    public System.Func<bool> condition;
-
-    public Achievement(string id, string name, string description, System.Func<bool> condition = null)
-    {
-        this.id = id;
-        this.name = name;
-        this.description = description;
-        this.unlocked = false;
-        this.condition = condition;
+        SceneManager.sceneLoaded -= OnSceneLoaded;
     }
 
-    public bool CheckCondition()
-    {
-        return condition?.Invoke() ?? false;
-    }
+    // === СОБЫТИЯ ===
+    public System.Action OnGamePause;
+    public System.Action OnGameResume;
+    public System.Action OnGameOver;
+    public System.Action OnLevelComplete;
+    public System.Action OnDataPacketCollected;
+    public System.Action OnEnemyDestroyed;
+    public System.Action OnCoinCollected;
 }

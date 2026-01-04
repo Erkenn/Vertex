@@ -2,430 +2,109 @@
 using UnityEngine.UI;
 using TMPro;
 using System.Collections;
+using UnityEngine.SceneManagement;
 
 public class UIManager : MonoBehaviour
 {
     public static UIManager Instance;
 
     [Header("=== HUD ЭЛЕМЕНТЫ ===")]
-    public TextMeshProUGUI healthText;
-    public TextMeshProUGUI hackChargesText;
-    public TextMeshProUGUI shieldChargesText;
-    public TextMeshProUGUI dataPacketsText;
-    public TextMeshProUGUI timerText;
-    public TextMeshProUGUI levelText;
-    public Image shieldIcon;
-    public TextMeshProUGUI shieldCountText;
-    public Image hackIcon;
+    public Slider healthBar;
+    public TextMeshProUGUI coinCountText;
     public TextMeshProUGUI hackCountText;
+    public TextMeshProUGUI shieldCountText;
+
+    [Header("=== ЭКРАН СМЕРТИ ===")]
     public GameObject deathScreen;
     public Button restartButtonInDeathScreen;
     public Button statsButtonInDeathScreen;
-    public Image coinIcon;
-    public TextMeshProUGUI coinCountText;
     public GameObject statsPanel;
     public TextMeshProUGUI statsText;
 
-    [Header("=== ИНДИКАТОРЫ СПОСОБНОСТЕЙ ===")]
-    public Image hackCooldownOverlay;
-    public Image shieldActiveIndicator;
-    public Slider healthBar;
-
-
-    [Header("=== МЕНЮ И ЭКРАНЫ ===")]
-    public GameObject pauseMenu;
-    public GameObject gameOverMenu;
-    public GameObject victoryMenu;
-    public GameObject hudPanel;
-
     [Header("=== МЕНЮ ПАУЗЫ ===")]
-    public GameObject pauseMenuPanel;
-    public Button resumeButton;
-    public Button restartButton;
-    public Button mainMenuButton;
-    public Button settingsButton;
+    public GameObject pauseMenuCanvas;
+    public Button resumeButtonPause;
+    public Button restartButtonPause;
+    public Button mainMenuButtonPause;
 
-    [Header("=== НЕОНОВЫЕ ЦВЕТА ===")]
-    public Color neonBlue = new Color(0.2f, 0.6f, 1f, 1f);
-    public Color neonGreen = new Color(0.2f, 1f, 0.4f, 1f);
-    public Color neonRed = new Color(1f, 0.2f, 0.4f, 1f);
-    public Color neonYellow = new Color(1f, 0.9f, 0.2f, 1f);
-
-    [Header("=== АНИМАЦИИ ===")]
-    public Animator healthAnimator;
-    public Animator abilitiesAnimator;
-
-    private PlayerController player;
-    private GameManager gameManager;
-
-    public Button restartLevelButton;
-    public Button showStatsButton;
-    private float cachedDeathTime;
-    private int cachedDeathCoins;
-    private int cachedDeathPackets;
-
-    public void ShowDeathScreen(float time, int coins, int dataPackets)
-    {
-        // Сохраняем статистику
-        cachedDeathTime = time;
-        cachedDeathCoins = coins;
-        cachedDeathPackets = dataPackets;
-
-        if (deathScreen != null)
-        {
-            deathScreen.SetActive(true);
-
-            if (restartButtonInDeathScreen != null)
-            {
-                restartButtonInDeathScreen.onClick.RemoveAllListeners();
-                restartButtonInDeathScreen.onClick.AddListener(OnRestartLevelFromDeath);
-            }
-
-            if (statsButtonInDeathScreen != null)
-            {
-                statsButtonInDeathScreen.onClick.RemoveAllListeners();
-                statsButtonInDeathScreen.onClick.AddListener(OnShowStatsFromDeath);
-            }
-        }
-    }
-
-    public void OnRestartLevelFromDeath()
-    {
-        HideDeathScreen();
-        if (GameManager.Instance != null)
-            GameManager.Instance.RestartCurrentLevel();
-        PlayUIClick();
-    }
-
-    public void OnShowStatsFromDeath()
-    {
-        // Форматируем статистику как красивый текст
-        string stats = $"<b>СТАТИСТИКА</b>\n\n" +
-                       $"Время: {FormatTime(cachedDeathTime)}\n" +
-                       $"Монеты: {cachedDeathCoins}\n" +
-                       $"Данные: {cachedDeathPackets}";
-
-        // Скрываем экран смерти
-        if (deathScreen != null)
-            deathScreen.SetActive(false);
-
-        // Показываем и заполняем панель статистики
-        if (statsPanel != null && statsText != null)
-        {
-            statsText.text = stats;
-            statsPanel.SetActive(true);
-        }
-        else
-        {
-            Debug.LogError("❌ statsPanel или statsText не назначены в UIManager!");
-        }
-    }
-
-    public void HideDeathScreen()
-    {
-        if (deathScreen != null)
-            deathScreen.SetActive(false);
-    }
-
-    public class Coin : MonoBehaviour
-    {
-        public int value = 1;
-        void OnTriggerEnter2D(Collider2D other)
-        {
-            if (other.CompareTag("Player"))
-            {
-                GameManager.Instance?.CollectCoin(value);
-                Destroy(gameObject);
-            }
-        }
-    }
-
-    public void UpdateCoinsUI(int coins)
-    {
-        if (coinCountText != null)
-            coinCountText.text = coins.ToString();
-    }
+    private bool uiInitialized = false;
 
     void Awake()
     {
+        Debug.Log("UIManager Awake");
+
+        // Простой синглтон для сцены
         if (Instance == null)
         {
             Instance = this;
-            Debug.Log("📊 UIManager инициализирован");
+            SceneManager.sceneLoaded += OnSceneLoaded;
+            Debug.Log("✅ UIManager создан");
         }
         else
         {
             Destroy(gameObject);
+            return;
         }
     }
 
     void Start()
     {
-        FindGameReferences();
+        Debug.Log("UIManager Start");
+
+        // Инициализируем если в игровой сцене
+        string sceneName = SceneManager.GetActiveScene().name;
+        if (sceneName.StartsWith("Level_") || sceneName == "Tutorial")
+        {
+            StartCoroutine(InitializeDelayed());
+        }
+    }
+
+    void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        Debug.Log($"UIManager: загружена сцена {scene.name}");
+
+        if (scene.name.StartsWith("Level_") || scene.name == "Tutorial")
+        {
+            uiInitialized = false;
+            StartCoroutine(InitializeDelayed());
+        }
+    }
+
+    IEnumerator InitializeDelayed()
+    {
+        yield return new WaitForSeconds(0.1f);
         InitializeUI();
-        ApplyNeonStyling();
     }
 
-    void Update()
+    // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ ДЛЯ ПОИСКА ЭЛЕМЕНТОВ
+    GameObject FindChild(Transform parent, string childName)
     {
-        if (gameManager != null && gameManager.isGameActive && !gameManager.isPaused)
+        if (parent == null) return null;
+
+        // Прямой поиск
+        foreach (Transform child in parent)
         {
-            UpdateDynamicUI();
-        }
-    }
-
-    void FindGameReferences()
-    {
-        gameManager = GameManager.Instance;
-        player = FindFirstObjectByType<PlayerController>();
-
-        if (player == null)
-            Debug.LogWarning("UIManager: PlayerController не найден");
-        if (gameManager == null)
-            Debug.LogWarning("UIManager: GameManager не найден");
-    }
-
-    void InitializeUI()
-    {
-        if (pauseMenu != null) pauseMenu.SetActive(false);
-        if (gameOverMenu != null) gameOverMenu.SetActive(false);
-        if (victoryMenu != null) victoryMenu.SetActive(false);
-        if (hudPanel != null) hudPanel.SetActive(true);
-        if (pauseMenuPanel != null) pauseMenuPanel.SetActive(false);
-        if (restartLevelButton != null)
-            restartLevelButton.onClick.AddListener(OnRestartLevelClicked);
-        if (gameManager != null)
-            UpdateCoinsUI(gameManager.coinsCollected);
-
-        UpdateHealthUI(100);
-        UpdateAbilitiesUI(3, 2);
-        UpdateDataPacketsUI(0);
-        UpdateLevelUI(1);
-        SetupPauseMenuButtons();
-    }
-
-    void ApplyNeonStyling()
-    {
-        if (healthBar != null)
-        {
-            healthBar.fillRect.GetComponent<Image>().color = neonGreen;
+            if (child.name == childName)
+                return child.gameObject;
         }
 
-        if (hackCooldownOverlay != null)
+        // Глубокий поиск
+        foreach (Transform child in parent)
         {
-            hackCooldownOverlay.color = neonBlue;
+            GameObject found = FindChild(child, childName);
+            if (found != null) return found;
         }
 
-        if (shieldActiveIndicator != null)
-        {
-            shieldActiveIndicator.color = neonYellow;
-        }
+        return null;
     }
 
-    public void OnRestartLevelClicked()
+    T FindComponentInChildren<T>(Transform parent, string childName) where T : Component
     {
-        if (GameManager.Instance != null)
-        {
-            // Скрываем экран смерти
-            if (deathScreen != null) deathScreen.SetActive(false);
-
-            // Перезапускаем уровень
-            GameManager.Instance.RestartCurrentLevel();
-
-            PlayUIClick();
-        }
+        GameObject obj = FindChild(parent, childName);
+        return obj != null ? obj.GetComponent<T>() : null;
     }
 
-    void UpdateDynamicUI()
-    {
-        if (timerText != null && gameManager != null)
-        {
-            timerText.text = FormatTime(gameManager.sessionTimer);
-        }
-
-        if (shieldActiveIndicator != null && player != null)
-        {
-            shieldActiveIndicator.gameObject.SetActive(player.isShieldActive);
-
-            if (player.isShieldActive)
-            {
-                float pulse = Mathf.PingPong(Time.time * 2f, 1f);
-                shieldActiveIndicator.color = new Color(neonYellow.r, neonYellow.g, neonYellow.b, pulse * 0.8f + 0.2f);
-            }
-        }
-
-        if (hackCooldownOverlay != null && player != null)
-        {
-            hackCooldownOverlay.fillAmount = 0f;
-        }
-    }
-
-    public void UpdateHealthUI(int currentHealth)
-    {
-        if (healthBar != null)
-        {
-            healthBar.value = currentHealth / 100f;
-
-            if (currentHealth > 70) healthBar.fillRect.GetComponent<Image>().color = neonGreen;
-            else if (currentHealth > 30) healthBar.fillRect.GetComponent<Image>().color = neonYellow;
-            else healthBar.fillRect.GetComponent<Image>().color = neonRed;
-        }
-    }
-
-    public void UpdateAbilitiesUI(int hackCharges, int shieldCharges)
-    {
-        if (shieldCountText != null)
-            shieldCountText.text = shieldCharges.ToString();
-        if (hackCountText != null)
-            hackCountText.text = hackCharges.ToString();
-
-        if (shieldIcon != null)
-            shieldIcon.color = shieldCharges > 0 ? Color.white : new Color(1, 1, 1, 0.3f);
-        if (hackIcon != null)
-            hackIcon.color = hackCharges > 0 ? Color.white : new Color(1, 1, 1, 0.3f);
-    }
-
-    public void UpdateDataPacketsUI(int packets)
-    {
-        if (dataPacketsText != null)
-        {
-            dataPacketsText.text = $"ДАННЫЕ: {packets}";
-
-            if (packets > 0)
-            {
-                dataPacketsText.transform.localScale = Vector3.one * 1.2f;
-                CancelInvoke("ResetDataPacketScale");
-                Invoke("ResetDataPacketScale", 0.3f);
-            }
-        }
-    }
-
-    public void UpdateLevelUI(int level)
-    {
-        if (levelText != null)
-        {
-            levelText.text = $"УРОВЕНЬ: {level}/5";
-        }
-    }
-
-    // Показать и спятать меню паузы при нажатии кнопки паузы
-    public void ShowPauseMenu()
-    {
-        if (pauseMenuPanel != null)
-        {
-            pauseMenuPanel.SetActive(true);
-            if (hudPanel != null) hudPanel.SetActive(false);
-        }
-    }
-
-    public void HidePauseMenu()
-    {
-        if (pauseMenuPanel != null)
-        {
-            pauseMenuPanel.SetActive(false);
-            if (hudPanel != null) hudPanel.SetActive(true);
-        }
-    }
-
-    public void ShowGameOverMenu(string reason)
-    {
-        if (gameOverMenu != null)
-        {
-            gameOverMenu.SetActive(true);
-            if (hudPanel != null) hudPanel.SetActive(false);
-
-            TextMeshProUGUI reasonText = gameOverMenu.GetComponentInChildren<TextMeshProUGUI>();
-            if (reasonText != null)
-            {
-                reasonText.text = reason;
-                reasonText.color = neonRed;
-            }
-        }
-    }
-
-    public void ShowVictoryScreen(float completionTime, int dataPackets, int enemiesDestroyed)
-    {
-        if (victoryMenu != null)
-        {
-            victoryMenu.SetActive(true);
-            if (hudPanel != null) hudPanel.SetActive(false);
-
-            TextMeshProUGUI statsText = victoryMenu.GetComponentInChildren<TextMeshProUGUI>();
-            if (statsText != null)
-            {
-                statsText.text = $"ВРЕМЯ: {FormatTime(completionTime)}\n" +
-                               $"ДАННЫЕ: {dataPackets}\n" +
-                               $"УНИЧТОЖЕНО: {enemiesDestroyed}";
-            }
-        }
-    }
-
-    void SetupPauseMenuButtons()
-    {
-        if (resumeButton != null)
-            resumeButton.onClick.AddListener(OnResumeButtonClicked);
-
-        if (restartButton != null)
-            restartButton.onClick.AddListener(OnRestartButtonClicked);
-
-        if (mainMenuButton != null)
-            mainMenuButton.onClick.AddListener(OnMainMenuButtonClicked);
-
-        if (settingsButton != null)
-            settingsButton.onClick.AddListener(OnSettingsButtonClicked);
-    }
-
-    public void OnResumeButtonClicked()
-    {
-        if (GameManager.Instance != null)
-        {
-            GameManager.Instance.TogglePause();
-            PlayUIClick();
-        }
-    }
-
-    public void OnRestartButtonClicked()
-    {
-        if (GameManager.Instance != null)
-        {
-            GameManager.Instance.StartNewGame();
-            PlayUIClick();
-        }
-    }
-
-    public void OnMainMenuButtonClicked()
-    {
-        UnityEngine.SceneManagement.SceneManager.LoadScene("MainMenu");
-        PlayUIClick();
-    }
-
-    public void OnSettingsButtonClicked()
-    {
-        if (SettingsManager.Instance != null)
-        {
-            SettingsManager.Instance.ShowSettings();
-        }
-        PlayUIClick();
-    }
-
-    public void ShowAchievementUnlocked(string achievementName, string description)
-    {
-        StartCoroutine(ShowAchievementPopup(achievementName, description));
-    }
-
-    private IEnumerator ShowAchievementPopup(string name, string description)
-    {
-        Debug.Log($"🏆 ДОСТИЖЕНИЕ: {name} - {description}");
-        yield return new WaitForSeconds(2f);
-    }
-
-    private Color GetHealthColor(int health)
-    {
-        if (health > 70) return neonGreen;
-        if (health > 30) return neonYellow;
-        return neonRed;
-    }
-
+    // ФОРМАТИРОВАНИЕ ВРЕМЕНИ
     private string FormatTime(float timeInSeconds)
     {
         int minutes = Mathf.FloorToInt(timeInSeconds / 60f);
@@ -433,16 +112,398 @@ public class UIManager : MonoBehaviour
         return $"{minutes:00}:{seconds:00}";
     }
 
-    private void ResetDataPacketScale()
+    void InitializeUI()
     {
-        if (dataPacketsText != null)
+        if (uiInitialized) return;
+
+        Debug.Log("🔄 Инициализация UIManager...");
+
+        // Находим HUD Canvas
+        GameObject hudCanvas = GameObject.Find("HUD Canvas");
+        if (hudCanvas == null)
         {
-            dataPacketsText.transform.localScale = Vector3.one;
+            Debug.LogError("❌ HUD Canvas не найден!");
+            return;
+        }
+
+        Debug.Log($"✅ Найден HUD Canvas: {hudCanvas.name}");
+
+        // === НАХОДИМ ВСЕ ЭЛЕМЕНТЫ ПРОСТЫМ СПОСОБОМ ===
+
+        // HUD элементы
+        healthBar = hudCanvas.transform.Find("HealthBar")?.GetComponent<Slider>();
+        coinCountText = hudCanvas.transform.Find("CoinCount")?.GetComponent<TextMeshProUGUI>();
+        hackCountText = hudCanvas.transform.Find("HackCount")?.GetComponent<TextMeshProUGUI>();
+        shieldCountText = hudCanvas.transform.Find("ShieldCount")?.GetComponent<TextMeshProUGUI>();
+
+        // DeathScreen
+        deathScreen = hudCanvas.transform.Find("DeathScreen")?.gameObject;
+        Debug.Log($"DeathScreen найден: {deathScreen != null}");
+
+        if (deathScreen != null)
+        {
+            // Кнопки в DeathScreen
+            restartButtonInDeathScreen = deathScreen.transform.Find("RestartButton")?.GetComponent<Button>();
+            statsButtonInDeathScreen = deathScreen.transform.Find("StatsButton")?.GetComponent<Button>();
+
+            // StatsPanel может быть внутри DeathScreen или рядом
+            statsPanel = hudCanvas.transform.Find("StatsPanel")?.gameObject;
+            if (statsPanel == null)
+            {
+                statsPanel = deathScreen.transform.Find("StatsPanel")?.gameObject;
+            }
+
+            Debug.Log($"StatsPanel найден: {statsPanel != null}");
+
+            if (statsPanel != null)
+            {
+                // Ищем StatsText внутри StatsPanel
+                statsText = statsPanel.transform.Find("StatsText")?.GetComponent<TextMeshProUGUI>();
+                if (statsText == null)
+                {
+                    // Пробуем другие возможные имена
+                    statsText = statsPanel.transform.Find("Text")?.GetComponent<TextMeshProUGUI>();
+                }
+
+                Debug.Log($"StatsText найден: {statsText != null}");
+
+                // Ищем кнопку "В главное меню" в StatsPanel - она называется "Continue"
+                Button backToMenuButton = statsPanel.transform.Find("Continue")?.GetComponent<Button>();
+
+                // Если не нашли "Continue", пробуем другие имена
+                if (backToMenuButton == null)
+                {
+                    backToMenuButton = statsPanel.transform.Find("MainMenuButton")?.GetComponent<Button>();
+                }
+                if (backToMenuButton == null)
+                {
+                    backToMenuButton = statsPanel.transform.Find("BackButton")?.GetComponent<Button>();
+                }
+                if (backToMenuButton == null)
+                {
+                    backToMenuButton = statsPanel.transform.Find("MenuButton")?.GetComponent<Button>();
+                }
+
+                if (backToMenuButton != null)
+                {
+                    backToMenuButton.onClick.RemoveAllListeners();
+                    backToMenuButton.onClick.AddListener(() => {
+                        Debug.Log("🏠 Нажата кнопка Continue из StatsPanel");
+                        if (GameManager.Instance != null)
+                        {
+                            GameManager.Instance.ReturnToMainMenu();
+                        }
+                    });
+                    Debug.Log($"✅ Кнопка '{backToMenuButton.name}' в StatsPanel настроена");
+                }
+                else
+                {
+                    Debug.LogWarning("⚠️ Кнопка Continue/MainMenu не найдена в StatsPanel!");
+
+                    // Создаем кнопку вручную если не нашли
+                    CreateContinueButtonInStatsPanel();
+                }
+            }
+        }
+
+        void CreateContinueButtonInStatsPanel()
+        {
+            if (statsPanel == null) return;
+
+            Debug.Log("🛠️ Создаем кнопку Continue в StatsPanel...");
+
+            // Создаем кнопку
+            GameObject buttonObj = new GameObject("Continue");
+            buttonObj.transform.SetParent(statsPanel.transform);
+
+            // Добавляем компоненты
+            Button button = buttonObj.AddComponent<Button>();
+            Image image = buttonObj.AddComponent<Image>();
+            image.color = new Color(0.2f, 0.4f, 0.8f, 1f);
+
+            // Текст кнопки
+            GameObject textObj = new GameObject("Text");
+            textObj.transform.SetParent(buttonObj.transform);
+            TextMeshProUGUI text = textObj.AddComponent<TextMeshProUGUI>();
+            text.text = "В ГЛАВНОЕ МЕНЮ";
+            text.color = Color.white;
+            text.fontSize = 20;
+            text.alignment = TMPro.TextAlignmentOptions.Center;
+
+            // Настраиваем RectTransform
+            RectTransform rt = buttonObj.GetComponent<RectTransform>();
+            rt.anchoredPosition = new Vector2(0, -100);
+            rt.sizeDelta = new Vector2(200, 50);
+
+            // Настраиваем RectTransform текста
+            RectTransform textRt = textObj.GetComponent<RectTransform>();
+            textRt.anchoredPosition = Vector2.zero;
+            textRt.sizeDelta = new Vector2(200, 50);
+
+            // Настраиваем обработчик
+            button.onClick.RemoveAllListeners();
+            button.onClick.AddListener(() => {
+                Debug.Log("🏠 Нажата созданная кнопка Continue");
+                if (GameManager.Instance != null)
+                {
+                    GameManager.Instance.ReturnToMainMenu();
+                }
+            });
+
+            Debug.Log("✅ Кнопка Continue создана");
+        }
+
+        // PauseMenuCanvas
+        pauseMenuCanvas = GameObject.Find("PauseMenuCanvas");
+        if (pauseMenuCanvas != null)
+        {
+            resumeButtonPause = pauseMenuCanvas.transform.Find("ResumeButton")?.GetComponent<Button>();
+            restartButtonPause = pauseMenuCanvas.transform.Find("RestartButton")?.GetComponent<Button>();
+            mainMenuButtonPause = pauseMenuCanvas.transform.Find("MainMenuButton")?.GetComponent<Button>();
+        }
+
+        // === НАСТРАИВАЕМ СОСТОЯНИЕ ===
+
+        // Скрываем все меню
+        if (deathScreen != null)
+        {
+            deathScreen.SetActive(false);
+            Debug.Log("✅ DeathScreen скрыт");
+        }
+
+        if (statsPanel != null)
+        {
+            statsPanel.SetActive(false);
+            Debug.Log("✅ StatsPanel скрыт");
+        }
+
+        if (pauseMenuCanvas != null)
+        {
+            pauseMenuCanvas.SetActive(false);
+            Debug.Log("✅ PauseMenuCanvas скрыт");
+        }
+
+        // === НАСТРАИВАЕМ КНОПКИ ===
+        SetupButtons();
+
+        uiInitialized = true;
+        Debug.Log("✅ UIManager инициализирован");
+    }
+
+    void SetupButtons()
+    {
+        Debug.Log("🔄 Настройка кнопок...");
+
+        // === КНОПКИ ЭКРАНА СМЕРТИ ===
+        if (restartButtonInDeathScreen != null)
+        {
+            restartButtonInDeathScreen.onClick.RemoveAllListeners();
+            restartButtonInDeathScreen.onClick.AddListener(() => {
+                Debug.Log("🔄 Нажата кнопка рестарта");
+                HideDeathScreen();
+                if (GameManager.Instance != null)
+                {
+                    GameManager.Instance.RestartCurrentLevel();
+                }
+            });
+            Debug.Log("✅ Кнопка рестарта настроена");
+        }
+
+        if (statsButtonInDeathScreen != null)
+        {
+            statsButtonInDeathScreen.onClick.RemoveAllListeners();
+            statsButtonInDeathScreen.onClick.AddListener(() => {
+                Debug.Log("📊 Нажата кнопка статистики");
+                OnShowStatsFromDeath();
+            });
+            Debug.Log("✅ Кнопка статистики настроена");
+        }
+
+        // === КНОПКИ МЕНЮ ПАУЗЫ ===
+        if (resumeButtonPause != null)
+        {
+            resumeButtonPause.onClick.RemoveAllListeners();
+            resumeButtonPause.onClick.AddListener(() => {
+                Debug.Log("▶️ Нажата кнопка продолжить");
+                if (GameManager.Instance != null)
+                {
+                    GameManager.Instance.TogglePause();
+                }
+            });
+        }
+
+        if (restartButtonPause != null)
+        {
+            restartButtonPause.onClick.RemoveAllListeners();
+            restartButtonPause.onClick.AddListener(() => {
+                Debug.Log("🔄 Нажата кнопка рестарта из паузы");
+                if (GameManager.Instance != null)
+                {
+                    GameManager.Instance.RestartCurrentLevel();
+                }
+            });
+        }
+
+        if (mainMenuButtonPause != null)
+        {
+            mainMenuButtonPause.onClick.RemoveAllListeners();
+            mainMenuButtonPause.onClick.AddListener(() => {
+                Debug.Log("🏠 Нажата кнопка главного меню из паузы");
+                if (GameManager.Instance != null)
+                {
+                    GameManager.Instance.ReturnToMainMenu();
+                }
+            });
         }
     }
 
-    private void PlayUIClick()
+    public void OnShowStatsFromDeath()
     {
-        Debug.Log("🔊 Воспроизведение звука клика UI");
+        Debug.Log("📊 Показываем панель статистики");
+
+        if (deathScreen != null)
+        {
+            deathScreen.SetActive(false);
+            Debug.Log("✅ DeathScreen скрыт");
+        }
+
+        if (statsPanel != null)
+        {
+            statsPanel.SetActive(true);
+            Debug.Log("✅ StatsPanel показан");
+
+            // Обновляем текст статистики
+            UpdateStatsText();
+        }
+        else
+        {
+            Debug.LogError("❌ StatsPanel не найден!");
+        }
+    }
+
+    void UpdateStatsText()
+    {
+        if (statsText != null && GameManager.Instance != null)
+        {
+            string stats = $"<b>СТАТИСТИКА ИГРЫ</b>\n\n" +
+                          $"Уровень: {GameManager.Instance.currentLevel}\n" +
+                          $"Монеты: {GameManager.Instance.coinsCollected}\n" +
+                          $"Данные: {GameManager.Instance.dataPacketsCollected}\n" +
+                          $"Время: {FormatTime(GameManager.Instance.sessionTimer)}";
+
+            statsText.text = stats;
+            Debug.Log("✅ Статистика обновлена");
+        }
+    }
+
+    public void ShowDeathScreen(float time, int coins, int dataPackets)
+    {
+        Debug.Log("💀 Показываем экран смерти");
+
+        if (!uiInitialized)
+        {
+            InitializeUI();
+        }
+
+        if (deathScreen != null)
+        {
+            deathScreen.SetActive(true);
+            Time.timeScale = 0f;
+
+            // Обновляем статистику в DeathScreen
+            if (statsText != null)
+            {
+                string stats = $"<b>СТАТИСТИКА УРОВНЯ</b>\n\n" +
+                              $"Время: {FormatTime(time)}\n" +
+                              $"Монеты: {coins}\n" +
+                              $"Данные: {dataPackets}";
+                statsText.text = stats;
+            }
+
+            Debug.Log("✅ Экран смерти показан");
+        }
+        else
+        {
+            Debug.LogError("❌ DeathScreen не найден!");
+        }
+    }
+
+    public void HideDeathScreen()
+    {
+        Debug.Log("❌ Скрываем экран смерти");
+
+        if (deathScreen != null)
+        {
+            deathScreen.SetActive(false);
+            Debug.Log("✅ DeathScreen скрыт");
+        }
+
+        // Также скрываем StatsPanel если он открыт
+        if (statsPanel != null && statsPanel.activeSelf)
+        {
+            statsPanel.SetActive(false);
+            Debug.Log("✅ StatsPanel скрыт");
+        }
+
+        // Возобновляем время
+        Time.timeScale = 1f;
+    }
+
+    public void ShowPauseMenu()
+    {
+        if (pauseMenuCanvas != null)
+        {
+            pauseMenuCanvas.SetActive(true);
+        }
+    }
+
+    public void HidePauseMenu()
+    {
+        if (pauseMenuCanvas != null)
+        {
+            pauseMenuCanvas.SetActive(false);
+        }
+    }
+
+    public void ShowVictoryScreen(float completionTime, int dataPackets, int enemiesDestroyed)
+    {
+        Debug.Log($"🎉 Победа!");
+    }
+
+    public void UpdateCoinsUI(int coins)
+    {
+        if (coinCountText != null)
+        {
+            coinCountText.text = coins.ToString();
+        }
+    }
+
+    public void UpdateHealthUI(int health)
+    {
+        if (healthBar != null)
+        {
+            healthBar.value = health / 100f;
+        }
+    }
+
+    public void UpdateAbilitiesUI(int hackCharges, int shieldCharges)
+    {
+        if (hackCountText != null)
+        {
+            hackCountText.text = hackCharges.ToString();
+        }
+
+        if (shieldCountText != null)
+        {
+            shieldCountText.text = shieldCharges.ToString();
+        }
+    }
+
+    public void UpdateLevelUI(int level) { }
+    public void SetLevelUI(int level) { }
+
+    void OnDestroy()
+    {
+        SceneManager.sceneLoaded -= OnSceneLoaded;
     }
 }

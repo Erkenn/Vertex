@@ -555,12 +555,34 @@ public class PlayerController : MonoBehaviour
         if (alreadyDied) return;
         alreadyDied = true;
 
-        Debug.Log("💀 Игрок погиб!");
+        Debug.Log("💀 PlayerController: Игрок погиб!");
 
-        // 1. Останавливаем игрока
+        // Останавливаем игрока
         canMove = false;
 
-        // 2. Вызываем GameManager — но НЕ останавливаем время здесь!
+        // Останавливаем физику
+        if (rb != null)
+        {
+            rb.linearVelocity = Vector2.zero;
+            rb.simulated = false; // Отключаем физику
+        }
+
+        // Визуальный эффект
+        if (spriteRenderer != null)
+        {
+            spriteRenderer.color = new Color(0.5f, 0.5f, 0.5f, 0.7f);
+        }
+
+        // Вызываем GameManager
+        if (GameManager.Instance != null)
+        {
+            // Небольшая задержка перед показом экрана смерти
+            Invoke("CallGameManagerDeath", 0.5f);
+        }
+    }
+
+    void CallGameManagerDeath()
+    {
         if (GameManager.Instance != null)
         {
             GameManager.Instance.PlayerDied();
@@ -602,6 +624,10 @@ public class PlayerController : MonoBehaviour
         if (other.CompareTag("Exit"))
         {
             GameManager.Instance?.CompleteLevel();
+        }
+        else if (other.CompareTag("TutorialExit"))
+        {
+            GameManager.Instance?.CompleteTutorial();
         }
 
         if (other.CompareTag("Coin"))
@@ -665,6 +691,9 @@ public class PlayerController : MonoBehaviour
 
     public void ResetPlayer()
     {
+        // Перенесите эту проверку в начало метода
+        if (gameObject == null) return;
+
         alreadyDied = false;
         health = 100;
         currentHackCharges = maxHackCharges;
@@ -683,7 +712,6 @@ public class PlayerController : MonoBehaviour
         jumpKeyHeld = false;
         wasGrounded = false;
         lastTimeGrounded = 0f;
-
 
         if (canCrouch)
         {
@@ -708,10 +736,15 @@ public class PlayerController : MonoBehaviour
         }
 
         if (shieldEffect != null) shieldEffect.SetActive(false);
-        spriteRenderer.color = originalColor;
+        if (spriteRenderer != null) spriteRenderer.color = originalColor;
         if (rb != null) { rb.linearVelocity = Vector2.zero; rb.angularVelocity = 0f; }
-        UIManager.Instance?.UpdateHealthUI(health);
-        UIManager.Instance?.UpdateAbilitiesUI(currentHackCharges, currentShieldCharges);
+
+        // ЭТУ ЧАСТЬ ОСТАВЬТЕ, НО С ЗАЩИТОЙ:
+        if (UIManager.Instance != null)
+        {
+            UIManager.Instance.UpdateHealthUI(health);
+            UIManager.Instance.UpdateAbilitiesUI(currentHackCharges, currentShieldCharges);
+        }
     }
 
     void OnDrawGizmosSelected()

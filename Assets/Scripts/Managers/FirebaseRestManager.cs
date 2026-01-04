@@ -29,10 +29,13 @@ public class FirebaseRestManager : MonoBehaviour
             Instance = this;
             DontDestroyOnLoad(gameObject);
         }
-        else
+        else if (Instance != this)
         {
             Destroy(gameObject);
+            return;
         }
+
+        LoadAuthTokens();
     }
 
     // === АВТОРИЗАЦИЯ ===

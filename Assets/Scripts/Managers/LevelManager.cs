@@ -1,6 +1,7 @@
 ﻿using UnityEngine;
 using UnityEngine.SceneManagement;
 using System.Collections;
+using TMPro;
 
 public class LevelManager : MonoBehaviour
 {
@@ -118,7 +119,14 @@ public class LevelManager : MonoBehaviour
     {
         if (scene.name.StartsWith("Level_"))
         {
-            levelStartTime = Time.time; // Начинаем отсчет времени уровня
+            levelStartTime = Time.time;
+
+            string levelNumberStr = scene.name.Replace("Level_", "");
+            if (int.TryParse(levelNumberStr, out int levelNum))
+            {
+                currentLevelIndex = levelNum - 1; // Преобразуем в 0-based индекс
+            }
+
             StartLevel(currentLevelIndex);
         }
     }
@@ -140,8 +148,37 @@ public class LevelManager : MonoBehaviour
 
         ConfigureLevel(config);
 
+        // ОБНОВЛЯЕМ UI С ЗАЩИТОЙ
+        StartCoroutine(UpdateLevelUIDelayed(levelIndex + 1));
+    }
+
+    private IEnumerator UpdateLevelUIDelayed(int levelNumber)
+    {
+        // Ждем пока UIManager инициализируется
+        yield return null;
+        yield return null; // Два кадра для надежности
+
         if (UIManager.Instance != null)
-            UIManager.Instance.UpdateLevelUI(levelIndex + 1);
+        {
+            // Пробуем оба метода
+            if (UIManager.Instance.HasMethod("UpdateLevelUI"))
+            {
+                UIManager.Instance.UpdateLevelUI(levelNumber);
+            }
+            else if (UIManager.Instance.HasMethod("SetLevelUI"))
+            {
+                UIManager.Instance.SetLevelUI(levelNumber);
+            }
+            else
+            {
+                // Прямое обновление через поиск текстового поля
+                UpdateLevelTextDirectly(levelNumber);
+            }
+        }
+        else
+        {
+            Debug.LogWarning("UIManager.Instance is null, не могу обновить UI уровня");
+        }
     }
 
     void ConfigureLevel(LevelConfig config)
@@ -154,6 +191,20 @@ public class LevelManager : MonoBehaviour
         if (spawner != null)
         {
             spawner.ConfigureSpawner(config);
+        }
+    }
+
+    private void UpdateLevelTextDirectly(int levelNumber)
+    {
+        // Ищем TextMeshProUGUI с уровнем напрямую
+        TextMeshProUGUI[] allTexts = FindObjectsOfType<TextMeshProUGUI>();
+        foreach (TextMeshProUGUI text in allTexts)
+        {
+            if (text.name.Contains("Level") || text.text.Contains("УРОВЕНЬ"))
+            {
+                text.text = $"УРОВЕНЬ: {levelNumber}/5";
+                break;
+            }
         }
     }
 
