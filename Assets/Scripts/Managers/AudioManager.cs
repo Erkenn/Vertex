@@ -1,6 +1,7 @@
 ﻿using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
+using UnityEngine.SceneManagement;
 
 public class AudioManager : MonoBehaviour
 {
@@ -47,7 +48,6 @@ public class AudioManager : MonoBehaviour
     private Dictionary<string, AudioClip> sfxLibrary = new Dictionary<string, AudioClip>();
     private Coroutine musicFadeCoroutine;
     private AudioClip currentMusic;
-    private float originalMusicVolume;
 
     void Awake()
     {
@@ -55,6 +55,7 @@ public class AudioManager : MonoBehaviour
         {
             Instance = this;
             DontDestroyOnLoad(gameObject);
+            SceneManager.sceneLoaded += OnSceneLoaded;
             InitializeAudioSystem();
             Debug.Log("🎵 AudioManager инициализирован");
         }
@@ -66,54 +67,76 @@ public class AudioManager : MonoBehaviour
 
     void InitializeAudioSystem()
     {
-        // Инициализация аудио источников если они не назначены
-        if (musicSource == null)
-            musicSource = gameObject.AddComponent<AudioSource>();
-        if (ambientSource == null)
-            ambientSource = gameObject.AddComponent<AudioSource>();
-        if (uiSource == null)
-            uiSource = gameObject.AddComponent<AudioSource>();
+        // Инициализация аудио источников
+        if (musicSource == null) musicSource = gameObject.AddComponent<AudioSource>();
+        if (ambientSource == null) ambientSource = gameObject.AddComponent<AudioSource>();
+        if (uiSource == null) uiSource = gameObject.AddComponent<AudioSource>();
 
-        // Настройка аудио источников
+        // Настройка источников
         musicSource.loop = true;
-        musicSource.volume = 0f; // Начинаем с 0 для плавного появления
+        musicSource.volume = 0f;
         ambientSource.loop = true;
         ambientSource.volume = 0.3f;
         uiSource.loop = false;
         uiSource.volume = 1f;
 
-        originalMusicVolume = musicVolume;
+        // Загружаем настройки БЕЗ применения к источникам
+        masterVolume = PlayerPrefs.GetFloat("MasterVolume", 1f);
+        musicVolume = PlayerPrefs.GetFloat("MusicVolume", 0.8f);
+        sfxVolume = PlayerPrefs.GetFloat("SFXVolume", 0.9f);
+        musicEnabled = PlayerPrefs.GetInt("MusicEnabled", 1) == 1;
+        sfxEnabled = PlayerPrefs.GetInt("SFXEnabled", 1) == 1;
 
-        // Загрузка сохраненных настроек
-        LoadAudioSettings();
-
-        // Заполнение библиотеки звуков
         PopulateSFXLibrary();
 
-        // Запуск фоновой музыки
-        PlayMainMenuMusic();
+        // ❌ НЕ запускаем музыку здесь — только через OnSceneLoaded
+    }
+
+    void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        Debug.Log($"🎵 AudioManager: загружена сцена '{scene.name}'");
+
+        if (scene.name == "MainMenu")
+        {
+            PlayMainMenuMusic();
+        }
+        else if (scene.name.StartsWith("Level_"))
+        {
+            string levelStr = scene.name.Replace("Level_", "");
+            if (int.TryParse(levelStr, out int levelNum))
+            {
+                PlayLevelMusic(levelNum - 1);
+            }
+            else
+            {
+                PlayLevelMusic(0);
+            }
+        }
+        else if (scene.name == "Tutorial")
+        {
+            PlayLevelMusic(0);
+        }
     }
 
     void PopulateSFXLibrary()
     {
-        // Игрок
         AddSFXToLibrary("PlayerHack", playerHack);
         AddSFXToLibrary("PlayerShield", playerShield);
         AddSFXToLibrary("PlayerDamage", playerDamage);
         AddSFXToLibrary("PlayerDeath", playerDeath);
         AddSFXToLibrary("PlayerMove", playerMove);
 
-        // Враги
         AddSFXToLibrary("EnemySpawn", enemySpawn);
         AddSFXToLibrary("EnemyDeath", enemyDeath);
         AddSFXToLibrary("TurretShoot", turretShoot);
         AddSFXToLibrary("ScannerAlert", scannerAlert);
 
-        // Системы
         AddSFXToLibrary("DataPacketCollect", dataPacketCollect);
         AddSFXToLibrary("UIClick", uiClick);
         AddSFXToLibrary("UIHover", uiHover);
         AddSFXToLibrary("LevelComplete", levelComplete);
+
+        Debug.Log($"✅ Загружено {sfxLibrary.Count} звуков в библиотеку");
     }
 
     void AddSFXToLibrary(string key, AudioClip clip)
@@ -124,11 +147,14 @@ public class AudioManager : MonoBehaviour
         }
     }
 
-    // === СИСТЕМА МУЗЫКИ ===
+    // === МУЗЫКА ===
 
     public void PlayMainMenuMusic()
     {
-        PlayMusic(mainMenuMusic, 1f);
+        if (mainMenuMusic != null)
+        {
+            PlayMusic(mainMenuMusic, 1f);
+        }
     }
 
     public void PlayLevelMusic(int levelIndex)
@@ -137,31 +163,32 @@ public class AudioManager : MonoBehaviour
         {
             PlayMusic(levelMusic[levelIndex], 0.8f);
         }
-        else
+        else if (levelMusic != null && levelMusic.Length > 0)
         {
-            // Музыка по умолчанию для уровня
             PlayMusic(levelMusic[0], 0.8f);
         }
     }
 
     public void PlayBossMusic()
     {
-        PlayMusic(bossMusic, 1f);
+        if (bossMusic != null) PlayMusic(bossMusic, 1f);
     }
 
     public void PlayVictoryMusic()
     {
-        PlayMusic(victoryMusic, 1f);
+        if (victoryMusic != null) PlayMusic(victoryMusic, 1f);
     }
 
     public void PlayGameOverMusic()
     {
-        PlayMusic(gameOverMusic, 1f);
+        if (gameOverMusic != null) PlayMusic(gameOverMusic, 1f);
     }
 
     void PlayMusic(AudioClip music, float volumeMultiplier = 1f)
     {
         if (!musicEnabled || music == null) return;
+
+        if (musicSource.clip == music && musicSource.isPlaying) return;
 
         if (musicFadeCoroutine != null)
             StopCoroutine(musicFadeCoroutine);
@@ -171,16 +198,16 @@ public class AudioManager : MonoBehaviour
 
     IEnumerator FadeMusic(AudioClip newMusic, float volumeMultiplier)
     {
-        // Плавное затухание текущей музыки
+        // Затухание текущей
         if (musicSource.isPlaying)
         {
-            float startVolume = musicSource.volume;
+            float startVol = musicSource.volume;
             for (float t = 0; t < 1f; t += Time.deltaTime)
             {
-                musicSource.volume = Mathf.Lerp(startVolume, 0f, t);
+                musicSource.volume = Mathf.Lerp(startVol, 0f, t);
                 yield return null;
             }
-            musicSource.volume = 0f;
+            musicSource.Stop();
         }
 
         // Смена трека
@@ -188,104 +215,130 @@ public class AudioManager : MonoBehaviour
         musicSource.clip = newMusic;
         musicSource.Play();
 
-        // Плавное появление новой музыки
-        float targetVolume = musicVolume * volumeMultiplier;
+        // Появление новой
+        float targetVol = musicVolume * masterVolume * volumeMultiplier;
         for (float t = 0; t < 2f; t += Time.deltaTime)
         {
-            musicSource.volume = Mathf.Lerp(0f, targetVolume, t / 2f);
+            musicSource.volume = Mathf.Lerp(0f, targetVol, t / 2f);
             yield return null;
         }
-        musicSource.volume = targetVolume;
+        musicSource.volume = targetVol;
+
+        Debug.Log($"✅ Музыка: {newMusic?.name ?? "null"}, громкость: {targetVol:F2}");
     }
 
     public void StopMusic()
     {
         if (musicFadeCoroutine != null)
             StopCoroutine(musicFadeCoroutine);
-
         StartCoroutine(FadeOutMusic());
     }
 
     IEnumerator FadeOutMusic()
     {
-        float startVolume = musicSource.volume;
+        float startVol = musicSource.volume;
         for (float t = 0; t < 1f; t += Time.deltaTime)
         {
-            musicSource.volume = Mathf.Lerp(startVolume, 0f, t);
+            musicSource.volume = Mathf.Lerp(startVol, 0f, t);
             yield return null;
         }
         musicSource.Stop();
         musicSource.volume = 0f;
     }
 
-    // === СИСТЕМА SFX ===
+    // === SFX ===
 
     public void PlaySFX(string soundName, float volumeScale = 1f, float pitch = 1f)
     {
-        if (!sfxEnabled || !sfxLibrary.ContainsKey(soundName)) return;
+        if (!sfxEnabled || !sfxLibrary.TryGetValue(soundName, out AudioClip clip)) return;
 
-        AudioClip clip = sfxLibrary[soundName];
-
-        // Создаем временный AudioSource для каждого SFX
-        AudioSource tempSource = gameObject.AddComponent<AudioSource>();
-        tempSource.clip = clip;
-        tempSource.volume = sfxVolume * volumeScale * masterVolume;
-        tempSource.pitch = pitch;
-        tempSource.Play();
-
-        // Автоматическое удаление после воспроизведения
-        Destroy(tempSource, clip.length + 0.1f);
+        AudioSource temp = gameObject.AddComponent<AudioSource>();
+        temp.clip = clip;
+        temp.volume = Mathf.Clamp01(sfxVolume * masterVolume * volumeScale);
+        temp.pitch = pitch;
+        temp.Play();
+        Destroy(temp, clip.length + 0.1f);
     }
 
     public void PlaySFXAtPosition(string soundName, Vector3 position, float volumeScale = 1f)
     {
-        if (!sfxEnabled || !sfxLibrary.ContainsKey(soundName)) return;
-
-        AudioClip clip = sfxLibrary[soundName];
-        AudioSource.PlayClipAtPoint(clip, position, sfxVolume * volumeScale * masterVolume);
+        if (!sfxEnabled || !sfxLibrary.TryGetValue(soundName, out AudioClip clip)) return;
+        float vol = sfxVolume * masterVolume * volumeScale;
+        AudioSource.PlayClipAtPoint(clip, position, vol);
     }
 
     public void PlayUISound(string soundName)
     {
-        if (!sfxEnabled || !sfxLibrary.ContainsKey(soundName)) return;
-
-        AudioClip clip = sfxLibrary[soundName];
-        uiSource.PlayOneShot(clip, sfxVolume * masterVolume);
+        if (!sfxEnabled || !sfxLibrary.TryGetValue(soundName, out AudioClip clip)) return;
+        float vol = sfxVolume * masterVolume;
+        uiSource.PlayOneShot(clip, vol);
     }
 
-    // === СИСТЕМА НАСТРОЕК ===
+    // === НАСТРОЙКИ ===
 
     public void SetMasterVolume(float volume)
     {
         masterVolume = Mathf.Clamp01(volume);
-        UpdateAllVolumes();
+        ApplyVolumes();
         SaveAudioSettings();
+        Debug.Log($"🔊 Master: {masterVolume:F2}");
     }
+
 
     public void SetMusicVolume(float volume)
     {
         musicVolume = Mathf.Clamp01(volume);
-        UpdateMusicVolume();
+        ApplyVolumes(); // ← применяем
         SaveAudioSettings();
+        Debug.Log($"🎵 Music: {musicVolume:F2}");
     }
 
     public void SetSFXVolume(float volume)
     {
         sfxVolume = Mathf.Clamp01(volume);
+        // SFX источники создаются временно, поэтому просто сохраняем — ✅
+        // Но для UI-звука (uiSource) — можно обновить
+        if (uiSource != null)
+            uiSource.volume = Mathf.Clamp01(sfxVolume * masterVolume);
         SaveAudioSettings();
+        Debug.Log($"🔊 SFX: {sfxVolume:F2}");
+    }
+
+    void ApplyVolumes()
+    {
+        // Обновляем музыку
+        if (musicSource != null && musicSource.isPlaying)
+        {
+            // Сохраняем относительную громкость трека (например, victoryMusic может быть тише)
+            float relativeVol = 1f;
+            if (currentMusic == victoryMusic || currentMusic == gameOverMusic)
+                relativeVol = 1f;
+            else if (currentMusic == mainMenuMusic)
+                relativeVol = 1f;
+            else
+                relativeVol = 0.8f; // как в PlayLevelMusic
+
+            musicSource.volume = masterVolume * musicVolume * relativeVol;
+        }
+
+        // Обновляем ambient (если используется)
+        if (ambientSource != null)
+        {
+            ambientSource.volume = masterVolume * 0.3f; // или как у тебя задумано
+        }
+
+        // Обновляем UI-звуки
+        if (uiSource != null)
+        {
+            uiSource.volume = masterVolume * sfxVolume;
+        }
     }
 
     public void ToggleMusic(bool enabled)
     {
         musicEnabled = enabled;
-        if (!enabled)
-        {
-            StopMusic();
-        }
-        else if (currentMusic != null)
-        {
-            musicSource.Play();
-        }
+        if (!enabled) StopMusic();
+        else if (currentMusic != null) PlayMusic(currentMusic, 1f);
         SaveAudioSettings();
     }
 
@@ -295,36 +348,7 @@ public class AudioManager : MonoBehaviour
         SaveAudioSettings();
     }
 
-    void UpdateAllVolumes()
-    {
-        UpdateMusicVolume();
-        // SFX обновляются при каждом воспроизведении
-    }
-
-    void UpdateMusicVolume()
-    {
-        if (musicSource != null)
-        {
-            musicSource.volume = musicVolume * masterVolume;
-        }
-        if (ambientSource != null)
-        {
-            ambientSource.volume = 0.3f * masterVolume;
-        }
-    }
-
-    // === СИСТЕМА СОХРАНЕНИЯ ===
-
-    void LoadAudioSettings()
-    {
-        masterVolume = PlayerPrefs.GetFloat("MasterVolume", 1f);
-        musicVolume = PlayerPrefs.GetFloat("MusicVolume", 0.8f);
-        sfxVolume = PlayerPrefs.GetFloat("SFXVolume", 0.9f);
-        musicEnabled = PlayerPrefs.GetInt("MusicEnabled", 1) == 1;
-        sfxEnabled = PlayerPrefs.GetInt("SFXEnabled", 1) == 1;
-
-        UpdateAllVolumes();
-    }
+    // === СОХРАНЕНИЕ ===
 
     void SaveAudioSettings()
     {
@@ -336,38 +360,38 @@ public class AudioManager : MonoBehaviour
         PlayerPrefs.Save();
     }
 
-    // === УПРАВЛЕНИЕ АМБИЕНТНЫМИ ЗВУКАМИ ===
+    // === АМБИЕНТ ===
 
-    public void PlayAmbientSound(AudioClip ambientClip)
+    public void PlayAmbientSound(AudioClip clip)
     {
-        if (ambientSource != null && ambientClip != null)
+        if (ambientSource != null && clip != null)
         {
-            ambientSource.clip = ambientClip;
+            ambientSource.clip = clip;
             ambientSource.Play();
         }
     }
 
     public void StopAmbientSound()
     {
-        if (ambientSource != null)
-        {
-            ambientSource.Stop();
-        }
+        ambientSource?.Stop();
     }
 
-    // === БЫСТРЫЕ МЕТОДЫ ДЛЯ ЧАСТЫХ ЗВУКОВ ===
+    // === УДОБНЫЕ МЕТОДЫ ===
 
-    public void PlayHackSound() => PlaySFX("PlayerHack");
-    public void PlayShieldSound() => PlaySFX("PlayerShield");
-    public void PlayDamageSound() => PlaySFX("PlayerDamage");
-    public void PlayDataCollectSound() => PlaySFX("DataPacketCollect");
-    public void PlayEnemyDeathSound() => PlaySFX("EnemyDeath");
     public void PlayUIClick() => PlayUISound("UIClick");
     public void PlayUIHover() => PlayUISound("UIHover");
+    public void PlayDataCollectSound() => PlaySFX("DataPacketCollect");
+    public void PlayEnemyDeathSound() => PlaySFX("EnemyDeath");
 
     void OnDestroy()
     {
+        SceneManager.sceneLoaded -= OnSceneLoaded;
         if (musicFadeCoroutine != null)
             StopCoroutine(musicFadeCoroutine);
+    }
+
+    public void StopAllMusic()
+    {
+        StopMusic();
     }
 }

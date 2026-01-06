@@ -325,9 +325,20 @@ public class UIManager : MonoBehaviour
             resumeButtonPause.onClick.RemoveAllListeners();
             resumeButtonPause.onClick.AddListener(() => {
                 Debug.Log("▶️ Нажата кнопка продолжить");
-                if (GameManager.Instance != null)
+                // ВМЕСТО этого:
+                // if (GameManager.Instance != null) GameManager.Instance.TogglePause();
+
+                // ДЕЛАЕМ ЭТО:
+                if (PauseManager.Instance != null)
                 {
-                    GameManager.Instance.TogglePause();
+                    PauseManager.Instance.ResumeGame();
+                }
+                else
+                {
+                    // Резерв: просто снять паузу и скрыть канвас вручную
+                    Time.timeScale = 1f;
+                    if (pauseMenuCanvas != null) pauseMenuCanvas.SetActive(false);
+                    if (GameManager.Instance != null) GameManager.Instance.isPaused = false;
                 }
             });
         }

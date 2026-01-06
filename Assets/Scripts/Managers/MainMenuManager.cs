@@ -75,11 +75,6 @@ public class MainMenuManager : MonoBehaviour
     public Button exitGameButton;
     public Button settingsButton;
 
-    // === АУДИО ССЫЛКИ ===
-    [Header("Аудио")]
-    public AudioSource backgroundMusic;
-    public AudioSource[] sfxSources;
-
     private GameObject currentHelpSection;
     [HideInInspector] public bool isPlayerButtonEnabled = false;
     private bool uiInitialized = false;
@@ -176,10 +171,6 @@ public class MainMenuManager : MonoBehaviour
         if (masterVolumeSlider != null) masterVolumeSlider.value = masterVolume;
         if (musicVolumeSlider != null) musicVolumeSlider.value = musicVolume;
         if (sfxVolumeSlider != null) sfxVolumeSlider.value = sfxVolume;
-
-        // Применяем громкость
-        AudioListener.volume = masterVolume;
-        if (backgroundMusic != null) backgroundMusic.volume = musicVolume;
 
         // Полноэкранный режим
         bool fullscreen = PlayerPrefs.GetInt("Fullscreen", 1) == 1;
@@ -316,6 +307,7 @@ public class MainMenuManager : MonoBehaviour
         helpPanel = FindChild(canvas.transform, "HelpPanel");
         accountPanel = FindChild(canvas.transform, "AccountPanel");
         statsPanel = FindChild(canvas.transform, "StatsPanel");
+        Debug.Log($"viewStatsButton found: {viewStatsButton != null}");
         tutorialOfferPanelAfterRegister = FindChild(canvas.transform, "TutorPanel2");
         tutorialOfferPanelAfterLogin = FindChild(canvas.transform, "TutorPanel1");
         settingsPanel = FindChild(canvas.transform, "SettingsPanel"); // Ищем панель настроек
@@ -367,12 +359,12 @@ public class MainMenuManager : MonoBehaviour
         startGameButton = FindChild(canvas.transform, "StartGame")?.GetComponent<Button>();
         helpButton = FindChild(canvas.transform, "Help")?.GetComponent<Button>();
         accountButton = FindChild(canvas.transform, "Account")?.GetComponent<Button>();
+        viewStatsButton = FindChild(canvas?.transform, "Stats")?.GetComponent<Button>();
 
         // === ПОИСК КНОПОК В ПАНЕЛЯХ ===
         // В AccountPanel
         loginButton = FindChild(accountPanel?.transform, "LoginButton")?.GetComponent<Button>();
         registerButton = FindChild(accountPanel?.transform, "RegisterButton")?.GetComponent<Button>();
-        viewStatsButton = FindChild(accountPanel?.transform, "Stats")?.GetComponent<Button>();
         backToMenuButton = FindChild(accountPanel?.transform, "BackToMenuButton")?.GetComponent<Button>();
 
         // В HelpPanel
@@ -537,28 +529,21 @@ public class MainMenuManager : MonoBehaviour
     // === МЕТОДЫ ДЛЯ НАСТРОЕК ===
     void SetMasterVolume(float volume)
     {
-        AudioListener.volume = volume;
-        Debug.Log($"Master volume: {volume}");
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.SetMasterVolume(volume);
     }
 
     void SetMusicVolume(float volume)
     {
-        if (backgroundMusic != null)
-            backgroundMusic.volume = volume;
-        Debug.Log($"Music volume: {volume}");
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.SetMusicVolume(volume);
+        // НЕ трогаем AudioListener — это для master!
     }
 
     void SetSFXVolume(float volume)
     {
-        if (sfxSources != null && sfxSources.Length > 0)
-        {
-            foreach (AudioSource sfx in sfxSources)
-            {
-                if (sfx != null)
-                    sfx.volume = volume;
-            }
-        }
-        Debug.Log($"SFX volume: {volume}");
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.SetSFXVolume(volume);
     }
 
     void SetFullscreen(bool isFullscreen)
@@ -582,18 +567,8 @@ public class MainMenuManager : MonoBehaviour
 
         // Закрываем панель
         HideSettings();
-
-        // Воспроизводим звук подтверждения
-        PlayApplySound();
     }
 
-    void PlayApplySound()
-    {
-        if (sfxSources != null && sfxSources.Length > 0 && sfxSources[0] != null)
-        {
-            sfxSources[0].Play();
-        }
-    }
 
     // === ПЕРЕПОДКЛЮЧЕНИЕ СОБЫТИЙ КНОПОК ===
     private void ReconnectButtonListeners()
@@ -887,20 +862,24 @@ public class MainMenuManager : MonoBehaviour
     }
 
     void OnViewStats()
+{
+    Debug.Log("📊 OnViewStats вызван!");
+    
+    if (FirebaseRestManager.Instance != null && FirebaseRestManager.Instance.IsAuthenticated)
     {
-        if (FirebaseRestManager.Instance != null && FirebaseRestManager.Instance.IsAuthenticated)
+        Debug.Log("✅ Пользователь авторизован — показываем статистику");
+        ShowStatsPanel();
+    }
+    else
+    {
+        Debug.Log("❌ Пользователь НЕ авторизован");
+        if (authStatusText != null)
         {
-            ShowStatsPanel();
-        }
-        else
-        {
-            if (authStatusText != null)
-            {
-                authStatusText.text = "Сначала войдите в аккаунт";
-                authStatusText.color = Color.red;
-            }
+            authStatusText.text = "Сначала войдите в аккаунт";
+            authStatusText.color = Color.red;
         }
     }
+}
 
     void UpdateStatsContent()
     {

@@ -256,7 +256,7 @@ public class GameManager : MonoBehaviour
             OnGamePause?.Invoke();
 
             // Безопасный вызов ShowPauseMenu
-            if (UIManager.Instance != null)
+            /*if (UIManager.Instance != null)
             {
                 UIManager.Instance.ShowPauseMenu();
             }
@@ -264,6 +264,7 @@ public class GameManager : MonoBehaviour
             {
                 Debug.LogWarning("UIManager.Instance is null при паузе");
             }
+            */
         }
         else
         {
@@ -286,7 +287,15 @@ public class GameManager : MonoBehaviour
 
         // Останавливаем все активные корутины
         StopAllCoroutines();
+        if (AudioManager.Instance != null)
+        {
+            AudioManager.Instance.StopAllMusic();
+        }
 
+        if (AudioManager.Instance != null)
+        {
+            AudioManager.Instance.StopMusic();
+        }
         // Сбрасываем состояние
         currentLevel = levelIndex;
         coinsCollected = 0;
@@ -299,11 +308,19 @@ public class GameManager : MonoBehaviour
 
         // Загружаем сцену
         SceneManager.LoadScene($"Level_{levelIndex}");
+
+        // Музыка запустится автоматически через OnEnable
     }
 
     public void CompleteLevel()
     {
         Debug.Log($"✅ Уровень {currentLevel} завершен!");
+
+        // Звук завершения уровня
+        if (AudioManager.Instance != null)
+        {
+            AudioManager.Instance.PlaySFX("LevelComplete");
+        }
 
         if (currentLevel < 5)
         {
@@ -506,6 +523,47 @@ public class GameManager : MonoBehaviour
 
         // Начинаем с первого уровня
         LoadLevel(1);
+    }
+
+    void OnEnable()
+    {
+        // Запускаем музыку когда GameManager активируется
+        StartCoroutine(StartLevelMusicWithDelay());
+    }
+
+    IEnumerator StartLevelMusicWithDelay()
+    {
+        yield return new WaitForSeconds(0.5f); // Ждем полсекунды
+
+        string currentScene = SceneManager.GetActiveScene().name;
+
+        // Если это игровая сцена
+        if (currentScene.StartsWith("Level_") || currentScene == "Tutorial")
+        {
+            // Получаем номер уровня из имени сцены
+            int levelNumber = 1;
+            if (currentScene.StartsWith("Level_"))
+            {
+                string levelStr = currentScene.Replace("Level_", "");
+                int.TryParse(levelStr, out levelNumber);
+            }
+
+            // Запускаем музыку для уровня
+            if (AudioManager.Instance != null)
+            {
+                AudioManager.Instance.PlayLevelMusic(levelNumber - 1); // -1 т.к. массив с 0
+                Debug.Log($"🎵 Запущена музыка для уровня {levelNumber}");
+            }
+            else
+            {
+                Debug.LogWarning("⚠️ AudioManager не найден при запуске уровня");
+            }
+        }
+        else if (currentScene == "MainMenu")
+        {
+            // В главном меню AudioManager сам запускает музыку
+            Debug.Log("🏠 Главное меню - музыка уже должна играть");
+        }
     }
 
     // === СТАРТ НОВОЙ ИГРЫ ===
