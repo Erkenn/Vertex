@@ -27,6 +27,11 @@ public class UIManager : MonoBehaviour
     public Button restartButtonPause;
     public Button mainMenuButtonPause;
 
+    [Header("=== ПРЕДУПРЕЖДЕНИЯ БОССА ===")]
+    public GameObject shieldWarningUI;
+    public GameObject hackWarningUI;
+    private Coroutine activeWarningCoroutine;
+
     private bool uiInitialized = false;
 
     void Awake()
@@ -512,6 +517,37 @@ public class UIManager : MonoBehaviour
 
     public void UpdateLevelUI(int level) { }
     public void SetLevelUI(int level) { }
+
+    public void ShowShieldWarning()
+    {
+        ShowBossWarning(shieldWarningUI, hackWarningUI);
+    }
+
+    public void ShowHackWarning()
+    {
+        ShowBossWarning(hackWarningUI, shieldWarningUI);
+    }
+
+    private void ShowBossWarning(GameObject showWarning, GameObject hideWarning)
+    {
+        if (hideWarning != null) hideWarning.SetActive(false);
+
+        if (showWarning != null)
+        {
+            showWarning.SetActive(true);
+
+            if (activeWarningCoroutine != null)
+                StopCoroutine(activeWarningCoroutine);
+
+            activeWarningCoroutine = StartCoroutine(HideWarningAfter(2.1f, showWarning));
+        }
+    }
+
+    private IEnumerator HideWarningAfter(float delay, GameObject warning)
+    {
+        yield return new WaitForSeconds(delay);
+        if (warning != null) warning.SetActive(false);
+    }
 
     void OnDestroy()
     {

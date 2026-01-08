@@ -28,8 +28,6 @@ public class Guardian : Enemy
         // Получаем коллайдер
         guardianCollider = GetComponent<Collider2D>();
 
-        FixSpriteColliderAlignment();
-
         // НАСТРАИВАЕМ Rigidbody2D
         ConfigureRigidbody();
 
@@ -54,41 +52,6 @@ public class Guardian : Enemy
         }
     }
 
-    private void FixSpriteColliderAlignment()
-    {
-        SpriteRenderer sr = GetComponent<SpriteRenderer>();
-        Collider2D col = GetComponent<Collider2D>();
-
-        if (sr == null || col == null) return;
-
-        // 1. Найти разницу между центрами
-        float spriteCenterY = sr.bounds.center.y;
-        float colliderCenterY = col.bounds.center.y;
-        float differenceY = spriteCenterY - colliderCenterY;
-
-        Debug.Log($"Разница позиций спрайт-коллайдер: {differenceY}");
-
-        // 2. Исправить позицию спрайта
-        if (Mathf.Abs(differenceY) > 0.01f)
-        {
-            transform.position += Vector3.up * differenceY;
-            Debug.Log($"Исправлено: сдвинуто на {differenceY}");
-        }
-
-        // 3. Проверить границы
-        float spriteBottom = sr.bounds.min.y;
-        float colliderBottom = col.bounds.min.y;
-
-        if (spriteBottom < colliderBottom)
-        {
-            float fixAmount = colliderBottom - spriteBottom + 0.05f;
-            Debug.Log($"Спрайт ниже коллайдера. Поднимаем на: {fixAmount}");
-            transform.position += Vector3.up * fixAmount;
-        }
-
-        // 4. Дополнительно: сделать Z = 0
-        transform.position = new Vector3(transform.position.x, transform.position.y, 0);
-    }
 
     void FixSpawnPosition()
     {
@@ -269,5 +232,10 @@ public class Guardian : Enemy
     {
         GameManager.Instance?.RegisterEnemyDestroyed();
         Destroy(gameObject);
+    }
+
+    public override void GetStunned(float duration)
+    {
+        Debug.Log($"Страж {name} игнорирует взлом");
     }
 }

@@ -4442,7 +4442,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   player: {fileID: 919237351}
-  offset: {x: 0, y: 5, z: -10}
+  offset: {x: 0, y: 0, z: -10}
   leftLimit: -10
   rightLimit: 150
   bottomLimit: -10

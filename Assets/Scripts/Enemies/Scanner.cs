@@ -17,6 +17,8 @@ public class Scanner : Enemy
     private bool isWaiting = false;
     private float waitTimer = 0f;
     private bool hasKilledPlayer = false;
+    public GameObject scannerLaserPrefab;
+    private GameObject activeLaser;
 
     protected override void Start()
     {
@@ -79,31 +81,67 @@ public class Scanner : Enemy
 
     private void ScanForPlayer()
     {
-        if (hasKilledPlayer || player == null) return;
+        if (hasKilledPlayer || player == null)
+        {
+            HideLaser();
+            return;
+        }
 
-        // Направление взгляда (влево/вправо)
         Vector2 lookDirection = spriteRenderer.flipX ? Vector2.right : Vector2.left;
-
-        // 🔥 РАСЧЁТ НАПРАВЛЕНИЯ С УЧЁТОМ УГЛА
         float angleRad = scanAngle * Mathf.Deg2Rad;
         Vector2 scanDirection = new Vector2(
             lookDirection.x,
             -Mathf.Tan(angleRad) * Mathf.Abs(lookDirection.x)
         ).normalized;
 
-        // Начало луча
         Vector2 scanOrigin = (Vector2)transform.position + lookDirection * 0.5f + Vector2.down * 0.3f;
 
-        // Отладка
-        Debug.DrawRay(scanOrigin, scanDirection * scanDistance, Color.cyan);
+        // Показываем лазер
+        ShowLaser(scanOrigin, scanDirection * scanDistance);
 
-        // Проверка
         RaycastHit2D hit = Physics2D.Raycast(scanOrigin, scanDirection, scanDistance, playerLayer);
         if (hit.collider != null && hit.collider.CompareTag("Player"))
         {
             KillPlayer();
             hasKilledPlayer = true;
         }
+    }
+
+    private void ShowLaser(Vector2 origin, Vector2 endOffset)
+    {
+        if (scannerLaserPrefab == null) return;
+
+        // Создаём лазер, если его нет
+        if (activeLaser == null)
+        {
+            activeLaser = Instantiate(scannerLaserPrefab, transform.position, Quaternion.identity);
+            activeLaser.transform.SetParent(transform); // Опционально
+        }
+
+        LineRenderer line = activeLaser.GetComponent<LineRenderer>();
+        if (line != null)
+        {
+            line.SetPosition(0, origin);
+            line.SetPosition(1, origin + endOffset);
+            line.enabled = true;
+        }
+    }
+
+    private void HideLaser()
+    {
+        if (activeLaser != null)
+        {
+            LineRenderer line = activeLaser.GetComponent<LineRenderer>();
+            if (line != null) line.enabled = false;
+        }
+    }
+
+    // В RecoverFromStun() добавьте:
+    protected override void RecoverFromStun()
+    {
+        base.RecoverFromStun();
+        hasKilledPlayer = false;
+        HideLaser(); // Скрываем лазер при пробуждении
     }
 
     private void KillPlayer()
@@ -115,13 +153,6 @@ public class Scanner : Enemy
             playerController.TakeDamage(1000);
             Debug.Log($"Scanner {name} убил игрока");
         }
-    }
-
-    protected override void RecoverFromStun()
-    {
-        base.RecoverFromStun();
-        // Сбрасываем статус убийства, чтобы можно было убить снова после пробуждения
-        hasKilledPlayer = false;
     }
 
     private void OnDrawGizmosSelected()

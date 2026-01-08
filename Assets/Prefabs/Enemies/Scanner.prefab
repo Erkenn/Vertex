@@ -167,21 +167,16 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   health: 1
   moveSpeed: 3
-  damage: 1
-  detectionRange: 5
-  attackRange: 1
   scoreValue: 100
   isActive: 1
   isStunned: 0
-  isChasing: 0
-  originalMaterial: {fileID: 0}
-  alertColor: {r: 1, g: 0.3, b: 0.3, a: 1}
-  deathEffect: {fileID: 0}
   patrolPoints:
   - {fileID: 0}
   - {fileID: 0}
-  waitTimeAtPoints: 1
+  waitTime: 1
   scanDistance: 10
   playerLayer:
     serializedVersion: 2
     m_Bits: 1
+  scanAngle: 45
+  scannerLaserPrefab: {fileID: 8662900375198858406, guid: f691a331c3a5f0c47846b0c13ba671f9, type: 3}

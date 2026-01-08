@@ -575,6 +575,7 @@ public class GameManager : MonoBehaviour
         PlayerPrefs.DeleteKey("CurrentLevel");
         PlayerPrefs.DeleteKey("CoinsCollected");
         PlayerPrefs.DeleteKey("DataPackets");
+        PlayerPrefs.DeleteKey("BossDefeated");
 
         // Сбрасываем переменные
         currentLevel = 1;
@@ -589,6 +590,14 @@ public class GameManager : MonoBehaviour
 
         // Загружаем первый уровень
         LoadLevel(1);
+    }
+
+    public void BossDefeated()
+    {
+        Debug.Log("🎉 Босс побежден! Открывается доступ к ядру...");
+        // Можно добавить сохранение прогресса
+        PlayerPrefs.SetInt("BossDefeated", 1);
+        PlayerPrefs.Save();
     }
 
     // === УТИЛИТЫ ===

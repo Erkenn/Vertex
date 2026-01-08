@@ -9,7 +9,12 @@ public abstract class Enemy : MonoBehaviour
     public int scoreValue = 100;
 
     [Header("=== СОСТОЯНИЯ ===")]
-    public bool isActive = true;
+    private bool _isActive = true;
+    public virtual bool isActive
+    {
+        get => _isActive;
+        set => _isActive = value;
+    }
     public bool isStunned = false;
 
     public System.Action OnEnemyDestroyed;
@@ -140,4 +145,5 @@ public abstract class Enemy : MonoBehaviour
         }
         isActive = false;
     }
+
 }

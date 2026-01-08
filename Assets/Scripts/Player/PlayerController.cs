@@ -24,7 +24,7 @@ public class PlayerController : MonoBehaviour
 
     [Header("=== ПРИСЕДАНИЕ ===")]
     public bool canCrouch = true;
-    public float crouchHeight = 0.8f; // ДОЛЖНО БЫТЬ МЕНЬШЕ originalHeight!
+    public float crouchHeight = 0.8f; 
     private float originalHeight;
     public float crouchTransitionSpeed = 10f;
     public bool canStandUp = true;
@@ -443,7 +443,9 @@ public class PlayerController : MonoBehaviour
     {
         if (IsGamePaused() || alreadyDied) return;
 
-        if (isShieldActive)
+        bool isLaserAttack = (damage == 1000 || damage == 35);
+
+        if (!isLaserAttack && isShieldActive)
         {
             DeactivateShield();
             Debug.Log("🛡 Щит поглотил урон!");
@@ -475,20 +477,40 @@ public class PlayerController : MonoBehaviour
     {
         if (IsGamePaused()) return;
 
-        // Тратим заряд
-        currentHackCharges--;
+        // Проверяем, можно ли взломать босса
+        Collider2D[] hits = Physics2D.OverlapCircleAll(transform.position, 15f);
+        foreach (Collider2D hit in hits)
+        {
+            CoreBoss boss = hit.GetComponent<CoreBoss>();
+            if (boss != null && boss.CanBeHacked())
+            {
+                boss.HackBoss();
+                Debug.Log("⚡ Взлом босса (без расхода заряда)");
+                return; // Не тратим заряд!
+            }
+        }
 
-        // Запускаем взлом
-        if (AbilityManager.Instance != null)
-            AbilityManager.Instance.ActivateHack();
+        if (currentHackCharges > 0)
+        {
+            currentHackCharges--;
 
-        // Обновляем UI
-        UIManager.Instance?.UpdateAbilitiesUI(currentHackCharges, currentShieldCharges);
+            // Запускаем взлом
+            if (AbilityManager.Instance != null)
+                AbilityManager.Instance.ActivateHack();
 
-        // Устанавливаем кулдаун
-        currentHackCooldown = hackCooldown;
+            // Обновляем UI
+            UIManager.Instance?.UpdateAbilitiesUI(currentHackCharges, currentShieldCharges);
 
-        Debug.Log("Активирован Взлом!");
+            // Устанавливаем кулдаун
+            currentHackCooldown = hackCooldown;
+
+            Debug.Log("Активирован Взлом!");
+        }
+
+        if (animator != null)
+        {
+            animator.SetTrigger("UseHack");
+        }
     }
 
 
@@ -611,6 +633,11 @@ public class PlayerController : MonoBehaviour
         // Деактивация через 3 секунды
         Invoke(nameof(DeactivateShield), shieldDuration);
 
+        if (animator != null)
+        {
+            animator.SetTrigger("UseShield");
+        }
+
         Debug.Log("🛡 Активирован Щит!");
     }
 
@@ -642,7 +669,7 @@ public class PlayerController : MonoBehaviour
         Destroy(dataPacket);
     }
 
-    
+
     void OnCollisionStay2D(Collision2D collision) => CheckGroundOnCollision(collision);
 
     void OnCollisionEnter2D(Collision2D col)
