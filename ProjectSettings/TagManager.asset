@@ -16,6 +16,7 @@ TagManager:
   - Enemy
   - TutorialExit
   - PauseButton
+  - Computer
   layers:
   - Default
   - TransparentFX

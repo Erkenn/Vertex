@@ -1,5 +1,6 @@
-﻿using UnityEngine;
-using System.Collections;
+﻿using System.Collections;
+using TMPro;
+using UnityEngine;
 
 public class PlayerController : MonoBehaviour
 {
@@ -74,6 +75,13 @@ public class PlayerController : MonoBehaviour
     [Header("=== ГРАНИЦЫ УРОВНЯ ===")]
     public float deathBoundaryY = -20f;
 
+    [Header("=== ВЗАИМОДЕЙСТВИЕ ===")]
+    public TextMeshProUGUI interactionText;
+    public GameObject interactionHint;
+    public Vector3 hintOffset = new Vector3(0, 1.5f, 0);
+
+    private ComputerTerminal currentComputer = null;
+    private bool canInteract = false;
     void Start()
     {
         rb = GetComponent<Rigidbody2D>();
@@ -124,6 +132,16 @@ public class PlayerController : MonoBehaviour
             groundCheckPoint = groundCheckObj.transform;
         }
 
+        if (interactionText != null)
+        {
+            interactionText.gameObject.SetActive(false);
+        }
+
+        if (interactionHint != null)
+        {
+            interactionHint.SetActive(false);
+        }
+
         _maxJumps = 1;
         currentJumps = 0;
         currentHackCharges = maxHackCharges;
@@ -144,6 +162,67 @@ public class PlayerController : MonoBehaviour
         CheckIfCanStandUp();
         UpdateCrouchPercentage();
         CheckDeathBoundaries();
+        UpdateInteractionUI();
+    }
+
+    void UpdateInteractionUI()
+    {
+        bool showHint = false;
+        string hintText = "";
+
+        if (currentComputer != null)
+        {
+            // Проверяем состояние компьютера
+            if (!currentComputer.used) // Если компьютер еще не использован
+            {
+                showHint = true;
+                hintText = "Нажми [E] для активации";
+            }
+            else if (currentComputer.canBeReused) // Если можно использовать повторно
+            {
+                showHint = true;
+                hintText = "Нажми [E] для активации";
+            }
+            else // Если использован и нельзя повторно
+            {
+                showHint = true;
+                hintText = "Уже использован";
+            }
+        }
+
+        // Обновляем TextMeshPro текст
+        if (interactionText != null)
+        {
+            interactionText.gameObject.SetActive(showHint);
+            if (showHint)
+            {
+                interactionText.text = hintText;
+
+                // Позиционируем текст над игроком (в мировых координатах)
+                Vector3 screenPos = Camera.main.WorldToScreenPoint(transform.position + hintOffset);
+                interactionText.transform.position = screenPos;
+            }
+        }
+
+        // Обновляем GameObject-подсказку
+        if (interactionHint != null)
+        {
+            interactionHint.SetActive(showHint);
+            if (showHint)
+            {
+                // Позиционируем над игроком в мировых координатах
+                interactionHint.transform.position = transform.position + hintOffset;
+
+                // Обновляем текст если есть TextMeshPro внутри
+                TextMeshPro hintTMP = interactionHint.GetComponentInChildren<TextMeshPro>();
+                if (hintTMP != null)
+                {
+                    hintTMP.text = hintText;
+                }
+            }
+        }
+
+        canInteract = showHint && currentComputer != null && !currentComputer.used;
     }
 
     void FixedUpdate()
@@ -643,6 +722,11 @@ public class PlayerController : MonoBehaviour
 
     void OnTriggerEnter2D(Collider2D other)
     {
+        if (other.CompareTag("Computer"))
+        {
+            currentComputer = other.GetComponent<ComputerTerminal>();
+        }
+
         if (other.CompareTag("DataPacket"))
         {
             CollectDataPacket(other.gameObject);
@@ -660,6 +744,20 @@ public class PlayerController : MonoBehaviour
         if (other.CompareTag("Coin"))
         {
             GameManager.Instance?.CollectCoin(1);
+        }
+
+    }
+
+    void OnTriggerExit2D(Collider2D other)
+    {
+        if (other.CompareTag("Computer"))
+        {
+            if (currentComputer != null && currentComputer.gameObject == other.gameObject)
+            {
+                Debug.Log($"💻 Вышел из зоны компьютера: {currentComputer.gameObject.name}");
+                currentComputer = null;
+                canInteract = false;
+            }
         }
     }
 
@@ -718,7 +816,6 @@ public class PlayerController : MonoBehaviour
 
     public void ResetPlayer()
     {
-        // Перенесите эту проверку в начало метода
         if (gameObject == null) return;
 
         alreadyDied = false;
@@ -766,7 +863,6 @@ public class PlayerController : MonoBehaviour
         if (spriteRenderer != null) spriteRenderer.color = originalColor;
         if (rb != null) { rb.linearVelocity = Vector2.zero; rb.angularVelocity = 0f; }
 
-        // ЭТУ ЧАСТЬ ОСТАВЬТЕ, НО С ЗАЩИТОЙ:
         if (UIManager.Instance != null)
         {
             UIManager.Instance.UpdateHealthUI(health);

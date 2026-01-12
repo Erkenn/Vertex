@@ -1,4 +1,4 @@
-using UnityEngine;
+п»їusing UnityEngine;
 
 [RequireComponent(typeof(Rigidbody2D))]
 public class MovingPlatform : MonoBehaviour
@@ -6,6 +6,16 @@ public class MovingPlatform : MonoBehaviour
     public Transform[] waypoints;
     public float speed = 2f;
     public bool pingPong = false;
+
+    // РђРєС‚РёРІР°С†РёСЏ
+    public bool requireActivation = false;
+    [SerializeField] private bool isActive = false;
+
+    // Р’РёР·СѓР°Р»
+    [Header("Р’РёР·СѓР°Р»СЊРЅС‹Рµ РёРЅРґРёРєР°С‚РѕСЂС‹")]
+    public SpriteRenderer platformRenderer;
+    public Color activeColor = new Color(0.3f, 0.7f, 1f, 1f); // РЎРёРЅРёР№
+    public Color inactiveColor = new Color(0.5f, 0.5f, 0.5f, 1f); // РЎРµСЂС‹Р№
 
     private int currentWaypoint = 0;
     private bool isReversing = false;
@@ -16,20 +26,29 @@ public class MovingPlatform : MonoBehaviour
     {
         lastPosition = transform.position;
         GetComponent<Rigidbody2D>().isKinematic = true;
+
+        if (platformRenderer == null)
+        {
+            platformRenderer = GetComponent<SpriteRenderer>();
+        }
+
+        // Р•СЃР»Рё РЅРµ С‚СЂРµР±СѓРµС‚СЃСЏ Р°РєС‚РёРІР°С†РёСЏ - СЃСЂР°Р·Сѓ Р°РєС‚РёРІРЅР°
+        if (!requireActivation)
+        {
+            isActive = true;
+        }
+
+        UpdateVisual();
     }
 
     void FixedUpdate()
     {
-        if (waypoints.Length == 0) return;
+        if (!isActive || waypoints.Length == 0) return;
 
-        // Сохраняем позицию ДО движения
         Vector3 positionBeforeMove = transform.position;
-
-        // Движение
         Transform target = waypoints[currentWaypoint];
         transform.position = Vector3.MoveTowards(transform.position, target.position, speed * Time.fixedDeltaTime);
 
-        // Проверка достижения точки
         if (Vector3.Distance(transform.position, target.position) < 0.05f)
         {
             if (pingPong && waypoints.Length > 1)
@@ -59,9 +78,47 @@ public class MovingPlatform : MonoBehaviour
             }
         }
 
-        // Вычисляем скорость за фиксированный кадр
         currentVelocity = (transform.position - positionBeforeMove) / Time.fixedDeltaTime;
     }
 
     public Vector2 GetPlatformVelocity() => currentVelocity;
+
+    public void ActivatePlatform()
+    {
+        isActive = true;
+        UpdateVisual();
+        Debug.Log($"рџ”„ РџР»Р°С‚С„РѕСЂРјР° {gameObject.name} Р°РєС‚РёРІРёСЂРѕРІР°РЅР°");
+    }
+
+    public void DeactivatePlatform()
+    {
+        isActive = false;
+        UpdateVisual();
+        Debug.Log($"рџ”„ РџР»Р°С‚С„РѕСЂРјР° {gameObject.name} РѕСЃС‚Р°РЅРѕРІР»РµРЅР°");
+    }
+
+    public void TogglePlatform()
+    {
+        isActive = !isActive;
+        UpdateVisual();
+        Debug.Log($"рџ”„ РџР»Р°С‚С„РѕСЂРјР° {gameObject.name}: {(isActive ? "РІРєР»СЋС‡РµРЅР°" : "РІС‹РєР»СЋС‡РµРЅР°")}");
+    }
+
+    void UpdateVisual()
+    {
+        if (platformRenderer != null)
+        {
+            platformRenderer.color = isActive ? activeColor : inactiveColor;
+        }
+    }
+
+    // Р”Р»СЏ РѕС‚Р»Р°РґРєРё
+    void OnDrawGizmos()
+    {
+        if (platformRenderer != null)
+        {
+            Gizmos.color = isActive ? Color.green : Color.red;
+            Gizmos.DrawWireCube(transform.position, Vector3.one * 0.3f);
+        }
+    }
 }
