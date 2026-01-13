@@ -32,6 +32,10 @@ public class UIManager : MonoBehaviour
     public GameObject hackWarningUI;
     private Coroutine activeWarningCoroutine;
 
+    [Header("=== ЭКРАН ПОБЕДЫ ===")]
+    public GameObject victoryScreen;
+    public TextMeshProUGUI victoryStatsText;
+
     private bool uiInitialized = false;
 
     void Awake()
@@ -483,7 +487,42 @@ public class UIManager : MonoBehaviour
 
     public void ShowVictoryScreen(float completionTime, int dataPackets, int enemiesDestroyed)
     {
-        Debug.Log($"🎉 Победа!");
+        Debug.Log($"🎉 Победа! Время: {FormatTime(completionTime)}, Монеты: {GameManager.Instance?.coinsCollected}, Враги: {enemiesDestroyed}");
+
+        HideDeathScreen();
+        if (pauseMenuCanvas != null) pauseMenuCanvas.SetActive(false);
+
+        if (AudioManager.Instance != null)
+        {
+            AudioManager.Instance.StopAllMusic();
+        }
+
+        if (FirebaseRestManager.Instance != null && FirebaseRestManager.Instance.IsAuthenticated)
+        {
+            FirebaseRestManager.Instance.SaveLeaderboardEntry(completionTime);
+        }
+
+        if (victoryStatsText != null && GameManager.Instance != null)
+        {
+            float bestTime = PlayerPrefs.GetFloat("BestCompletionTime", Mathf.Infinity);
+            string bestTimeStr = bestTime < Mathf.Infinity ? FormatTime(bestTime) : "—";
+
+            victoryStatsText.text = $"<b>ПОБЕДА!</b>\n\n" +
+                                   $"⏱ Время прохождения: {FormatTime(GameManager.Instance.sessionTimer)}\n" +
+                                   $"🥇 Лучшее время: {bestTimeStr}\n" +
+                                   $"🪙 Собрано монет: {GameManager.Instance.coinsCollected}\n" +
+                                   $"👾 Уничтожено врагов: {GameManager.Instance.enemiesDestroyed}";
+        }
+        
+        if (victoryScreen != null)
+        {
+            victoryScreen.SetActive(true);
+            Time.timeScale = 0f;
+        }
+        else
+        {
+            Debug.LogError("❌ victoryScreen не назначен в UIManager!");
+        }
     }
 
     public void UpdateCoinsUI(int coins)

@@ -316,7 +316,29 @@ public class GameManager : MonoBehaviour
     {
         Debug.Log($"✅ Уровень {currentLevel} завершен!");
 
-        // Звук завершения уровня
+        float bestTime = PlayerPrefs.GetFloat($"Level_{currentLevel}_BestTime", Mathf.Infinity);
+        bool isNewBest = sessionTimer < bestTime;
+
+        PlayerPrefs.SetInt($"Level_{currentLevel}_Coins", coinsCollected);
+
+        if (isNewBest)
+        {
+            PlayerPrefs.SetFloat($"Level_{currentLevel}_BestTime", sessionTimer);
+            Debug.Log($"🏆 Новый рекорд на уровне {currentLevel}!");
+        }
+
+        PlayerPrefs.Save();
+
+        if (isNewBest && FirebaseRestManager.Instance != null && FirebaseRestManager.Instance.IsAuthenticated)
+        {
+            FirebaseRestManager.Instance.SaveLevelProgress(
+                currentLevel,
+                coinsCollected,
+                sessionTimer
+            );
+            Debug.Log($"☁️ Новый рекорд уровня {currentLevel} сохранён в Firebase");
+        }
+
         if (AudioManager.Instance != null)
         {
             AudioManager.Instance.PlaySFX("LevelComplete");
@@ -598,6 +620,31 @@ public class GameManager : MonoBehaviour
         // Можно добавить сохранение прогресса
         PlayerPrefs.SetInt("BossDefeated", 1);
         PlayerPrefs.Save();
+    }
+
+    public void CompleteFinalCore()
+    {
+        Debug.Log("🎉 Ядро взломано! Показываем финальную статистику");
+
+        isGameActive = false;
+        Time.timeScale = 1f;
+
+        // Сохраняем лучшее время
+        if (sessionTimer < bestCompletionTime)
+        {
+            bestCompletionTime = sessionTimer;
+            PlayerPrefs.SetFloat("BestCompletionTime", bestCompletionTime);
+            PlayerPrefs.Save();
+        }
+
+        if (UIManager.Instance != null)
+        {
+            UIManager.Instance.ShowVictoryScreen(sessionTimer, dataPacketsCollected, enemiesDestroyed);
+        }
+        else
+        {
+            Debug.LogError("❌ UIManager не найден для показа финальной статистики!");
+        }
     }
 
     // === УТИЛИТЫ ===

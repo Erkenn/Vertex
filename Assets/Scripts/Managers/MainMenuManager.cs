@@ -5,6 +5,7 @@ using UnityEngine.SceneManagement;
 using System.Text;
 using System.Collections;
 using System.Collections.Generic;
+using UnityEngine.Video;
 
 public class MainMenuManager : MonoBehaviour
 {
@@ -16,7 +17,7 @@ public class MainMenuManager : MonoBehaviour
     public GameObject statsPanel;
     public GameObject tutorialOfferPanelAfterRegister;
     public GameObject tutorialOfferPanelAfterLogin;
-    public GameObject settingsPanel; // Добавили панель настроек
+    public GameObject settingsPanel;
 
     // === ЭЛЕМЕНТЫ НАСТРОЕК (если управляем из этого скрипта) ===
     [Header("Настройки")]
@@ -760,13 +761,50 @@ public class MainMenuManager : MonoBehaviour
             }
             else
             {
-                SceneManager.LoadScene("Level_1");
+                StartCoroutine(PlayIntroCutscenesAndLoadLevel1());
             }
         }
         else
         {
             ShowAccountPanel();
         }
+    }
+
+    IEnumerator PlayIntroAndLoadLevel1()
+    {
+        // Отключаем кнопки, чтобы не нажимали во время кадры
+        DisableMainButtons();
+
+        if (AudioManager.Instance != null)
+        {
+            AudioManager.Instance.StopMusic();
+        }
+
+        // Убеждаемся, что CutsceneManager существует
+        if (CutsceneManager.Instance == null)
+        {
+            Debug.LogError("❌ CutsceneManager не найден! Загружаем Level_1 напрямую.");
+            SceneManager.LoadScene("Level_1");
+            yield break;
+        }
+
+        // Загружаем видео из Resources
+        VideoClip introA = Resources.Load<VideoClip>("Cutscenes/IntroA");
+        VideoClip introB = Resources.Load<VideoClip>("Cutscenes/IntroB");
+
+        if (introA == null || introB == null)
+        {
+            Debug.LogError("❌ Одно или оба видео не найдены в Resources/Cutscenes/");
+            SceneManager.LoadScene("Level_1");
+            yield break;
+        }
+
+        yield return CutsceneManager.Instance.PlayCutscene(introA);
+        yield return CutsceneManager.Instance.PlayCutscene(introB);
+
+        CutsceneManager.DestroyInstance();
+
+        SceneManager.LoadScene("Level_1");
     }
 
     void OnLogin()
@@ -809,12 +847,22 @@ public class MainMenuManager : MonoBehaviour
         for (int level = 1; level <= 5; level++)
         {
             FirebaseRestManager.Instance.LoadLevelProgress(level, (coins, time) => {
-                PlayerPrefs.SetInt($"Level{level}_Coins", coins);
-                PlayerPrefs.SetFloat($"Level{level}_Time", time);
-                PlayerPrefs.Save();
-                UpdateStatsContent();
+                if (time > 0)
+                {
+                    float currentBest = PlayerPrefs.GetFloat($"Level_{level}_BestTime", Mathf.Infinity);
+
+                    if (time < currentBest)
+                    {
+                        PlayerPrefs.SetFloat($"Level_{level}_BestTime", time);
+                        PlayerPrefs.SetInt($"Level_{level}_Coins", coins);
+                        PlayerPrefs.Save();
+                        Debug.Log($"📥 Обновлён рекорд уровня {level} из Firebase");
+                    }
+                }
             });
         }
+
+        UpdateStatsContent();
     }
 
     void OnRegister()
@@ -888,27 +936,34 @@ public class MainMenuManager : MonoBehaviour
         StringBuilder sb = new StringBuilder();
         bool hasAnyData = false;
 
+        // Загружаем общий лучший результат игры
+        float bestGameTime = PlayerPrefs.GetFloat("BestCompletionTime", Mathf.Infinity);
+        if (bestGameTime < Mathf.Infinity)
+        {
+            sb.AppendLine($"<b>🏆 ЛУЧШЕЕ ВРЕМЯ ПРОХОЖДЕНИЯ</b>");
+            sb.AppendLine($"⏱ {FormatTime(bestGameTime)}\n");
+            hasAnyData = true;
+        }
+
+        // Загружаем лучшие результаты по уровням
         for (int level = 1; level <= 5; level++)
         {
-            int coins = PlayerPrefs.GetInt($"Level{level}_Coins", 0);
-            float time = PlayerPrefs.GetFloat($"Level{level}_Time", 0f);
-            int packets = PlayerPrefs.GetInt($"Level{level}_Packets", 0);
+            float bestTime = PlayerPrefs.GetFloat($"Level_{level}_BestTime", Mathf.Infinity);
+            int coins = PlayerPrefs.GetInt($"Level_{level}_Coins", 0);
 
-            if (coins > 0 || time > 0 || packets > 0)
+            if (bestTime < Mathf.Infinity)
             {
                 hasAnyData = true;
                 sb.AppendLine($"<b>Уровень {level}</b>");
-                sb.AppendLine($"  Монеты: {coins}");
-                sb.AppendLine($"  Данные: {packets}");
-                if (time > 0)
-                    sb.AppendLine($"  Время: {FormatTime(time)}");
+                sb.AppendLine($"  ⏱ Время: {FormatTime(bestTime)}");
+                sb.AppendLine($"  🪙 Монеты: {coins}");
                 sb.AppendLine("");
             }
         }
 
         if (!hasAnyData)
         {
-            sb.AppendLine("Нет сохранённой статистики.");
+            sb.AppendLine("Нет сохранённых рекордов.");
         }
 
         statsContent.text = sb.ToString();
@@ -986,11 +1041,12 @@ public class MainMenuManager : MonoBehaviour
 #endif
     }
 
-    public void ReturnToMainMenuAfterTutorial()
+    public void CompleteTutorialAndStartGame()
     {
         PlayerPrefs.SetInt("HasCompletedTutorial", 1);
         PlayerPrefs.Save();
-        SceneManager.LoadScene("MainMenu");
+
+        StartCoroutine(PlayIntroCutscenesAndLoadLevel1());
     }
 
     void UpdateAuthStatus()
@@ -1010,6 +1066,46 @@ public class MainMenuManager : MonoBehaviour
             authStatusText.color = Color.red;
             if (viewStatsButton != null) viewStatsButton.interactable = false;
         }
+    }
+
+    private IEnumerator PlayIntroCutscenesAndLoadLevel1()
+    {
+        // Отключаем кнопки, чтобы не нажимали во время кат-сцен
+        DisableMainButtons();
+
+        if (AudioManager.Instance != null)
+        {
+            AudioManager.Instance.StopMusic();
+        }
+
+        // Убеждаемся, что CutsceneManager существует
+        if (CutsceneManager.Instance == null)
+        {
+            Debug.LogError("❌ CutsceneManager не найден! Загружаем Level_1 напрямую.");
+            SceneManager.LoadScene("Level_1");
+            yield break;
+        }
+
+        // Загружаем видео из Resources
+        VideoClip introA = Resources.Load<VideoClip>("Cutscenes/IntroA");
+        VideoClip introB = Resources.Load<VideoClip>("Cutscenes/IntroB");
+
+        if (introA == null || introB == null)
+        {
+            Debug.LogError("❌ Одно или оба видео не найдены в Resources/Cutscenes/");
+            SceneManager.LoadScene("Level_1");
+            yield break;
+        }
+
+        // Проигрываем кат-сцены
+        yield return CutsceneManager.Instance.PlayCutscene(introA);
+        yield return CutsceneManager.Instance.PlayCutscene(introB);
+
+        // Удаляем CutsceneManager перед загрузкой уровня
+        CutsceneManager.DestroyInstance();
+
+        // Загружаем первый уровень
+        SceneManager.LoadScene("Level_1");
     }
 
     void ShowTutorialPrompt()

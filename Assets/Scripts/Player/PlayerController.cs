@@ -883,4 +883,27 @@ public class PlayerController : MonoBehaviour
             Gizmos.DrawWireSphere(headCheckPoint.position, headCheckRadius);
         }
     }
+
+    public void SetControlsEnabled(bool enabled)
+    {
+        canMove = enabled;
+        if (!enabled)
+        {
+            if (rb != null)
+                rb.linearVelocity = Vector2.zero;
+
+            jumpRequested = false;
+            jumpKeyHeld = false;
+            wantsToCrouch = false;
+            isCrouching = false;
+
+            if (animator != null)
+            {
+                animator.SetBool("IsGrounded", true);
+                animator.SetFloat("Speed", 0f);
+            }
+
+            Debug.Log("🎮 Управление отключено");
+        }
+    }
 }

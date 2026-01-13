@@ -180,15 +180,61 @@ public class FirebaseRestManager : MonoBehaviour
             PlayerPrefs.GetString("PlayerEmail", "Игрок").Split('@')[0]);
 
         var data = new Dictionary<string, object>
+    {
+        { "displayName", displayName },
+        { "totalTime", totalTime },
+        { "timestamp", DateTime.UtcNow.ToUnixTimeSeconds() }
+    };
+
+        string json = Json.Serialize(data);
+        string path = $"users/{currentUserId}/runs/{DateTime.UtcNow:yyyyMMddHHmmssfff}";
+        StartCoroutine(PutDataCoroutine(path, json));
+    }
+
+    private Dictionary<string, object> GetLevelsData()
+    {
+        var levelsData = new Dictionary<string, object>();
+
+        for (int i = 1; i <= 5; i++)
         {
-            { "displayName", displayName },
+            float bestTime = PlayerPrefs.GetFloat($"Level_{i}_BestTime", Mathf.Infinity);
+            int coins = PlayerPrefs.GetInt($"Level_{i}_Coins", 0);
+
+            if (bestTime < Mathf.Infinity)
+            {
+                levelsData[$"level_{i}"] = new Dictionary<string, object>
+            {
+                { "bestTime", bestTime },
+                { "coinsCollected", coins },
+                { "completed", true }
+            };
+            }
+        }
+
+        return levelsData;
+    }
+
+    private void UpdateBestRun(float totalTime, string attemptId)
+    {
+        float currentBest = PlayerPrefs.GetFloat("BestCompletionTime", Mathf.Infinity);
+
+        if (totalTime < currentBest)
+        {
+            PlayerPrefs.SetFloat("BestCompletionTime", totalTime);
+            PlayerPrefs.SetString("BestRunId", attemptId);
+            PlayerPrefs.Save();
+
+            var bestRunData = new Dictionary<string, object>
+        {
+            { "attemptId", attemptId },
             { "totalTime", totalTime },
             { "timestamp", DateTime.UtcNow.ToUnixTimeSeconds() }
         };
 
-        string json = Json.Serialize(data);
-        string path = $"leaderboard/{currentUserId}";
-        StartCoroutine(PutDataCoroutine(path, json));
+            string json = Json.Serialize(bestRunData);
+            string path = $"users/{currentUserId}/bestRun";
+            StartCoroutine(PutDataCoroutine(path, json));
+        }
     }
 
     public void LoadLevelProgress(int levelIndex, Action<int, float> onLoaded)

@@ -105,7 +105,7 @@ public class AudioManager : MonoBehaviour
             string levelStr = scene.name.Replace("Level_", "");
             if (int.TryParse(levelStr, out int levelNum))
             {
-                PlayLevelMusic(levelNum - 1);
+                PlayLevelMusic(levelNum - 1); // Level_1 → index 0
             }
             else
             {
@@ -202,11 +202,16 @@ public class AudioManager : MonoBehaviour
         if (musicSource.isPlaying)
         {
             float startVol = musicSource.volume;
-            for (float t = 0; t < 1f; t += Time.deltaTime)
+            float fadeOutDuration = 1f;
+            float elapsed = 0f;
+
+            while (elapsed < fadeOutDuration)
             {
-                musicSource.volume = Mathf.Lerp(startVol, 0f, t);
+                elapsed += Time.unscaledDeltaTime;
+                musicSource.volume = Mathf.Lerp(startVol, 0f, elapsed / fadeOutDuration);
                 yield return null;
             }
+
             musicSource.Stop();
         }
 
@@ -217,9 +222,13 @@ public class AudioManager : MonoBehaviour
 
         // Появление новой
         float targetVol = musicVolume * masterVolume * volumeMultiplier;
-        for (float t = 0; t < 2f; t += Time.deltaTime)
+        float fadeInDuration = 2f;
+        float elapsedd = 0f;
+        elapsedd = 0f;
+        while (elapsedd < fadeInDuration)
         {
-            musicSource.volume = Mathf.Lerp(0f, targetVol, t / 2f);
+            elapsedd += Time.unscaledDeltaTime;
+            musicSource.volume = Mathf.Lerp(0f, targetVol, elapsedd / fadeInDuration);
             yield return null;
         }
         musicSource.volume = targetVol;
@@ -237,11 +246,17 @@ public class AudioManager : MonoBehaviour
     IEnumerator FadeOutMusic()
     {
         float startVol = musicSource.volume;
-        for (float t = 0; t < 1f; t += Time.deltaTime)
+        float duration = 1f;
+        float elapsed = 0f;
+
+        while (elapsed < duration)
         {
+            elapsed += Time.unscaledDeltaTime;
+            float t = elapsed / duration;
             musicSource.volume = Mathf.Lerp(startVol, 0f, t);
             yield return null;
         }
+
         musicSource.Stop();
         musicSource.volume = 0f;
     }

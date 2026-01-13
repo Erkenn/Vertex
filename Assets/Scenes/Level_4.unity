@@ -1968,6 +1968,11 @@ MonoBehaviour:
   - {fileID: 1496793848}
   speed: 2
   pingPong: 0
+  requireActivation: 0
+  isActive: 0
+  platformRenderer: {fileID: 0}
+  activeColor: {r: 0.3, g: 0.7, b: 1, a: 1}
+  inactiveColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
 --- !u!50 &416863367
 Rigidbody2D:
   serializedVersion: 5
@@ -2891,7 +2896,7 @@ Transform:
   m_GameObject: {fileID: 643846878}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 134.94, y: 3.16, z: -5.516927}
+  m_LocalPosition: {x: -4.5, y: -2.7, z: -5.516927}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []

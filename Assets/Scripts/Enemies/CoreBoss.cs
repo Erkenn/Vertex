@@ -5,7 +5,7 @@ public class CoreBoss : MonoBehaviour
 {
     [Header("=== СОСТОЯНИЯ БОССА (5 УДАРОВ) ===")]
     public int totalHitsRequired = 5;
-    public int currentHits = 0;
+    private int currentHits = 0;
 
     // Состояния частей тела
     public bool leftHornBroken = false;
@@ -25,21 +25,23 @@ public class CoreBoss : MonoBehaviour
     public float laserAttackCooldownBase = 7f;
 
     [Header("=== ВИЗУАЛЬНЫЕ ЭФФЕКТЫ ===")]
-    public GameObject laserVisual; // Префаб лазера (линия из 2 точек)
-    public Transform laserOrigin;  // Точка старта лазера (глаз босса)
+    public GameObject laserVisual;
+    public Transform laserOrigin;
     public float laserDuration = 1.5f;
-    public float laserWidth = 0.3f;
 
     [Header("=== ДВИЖЕНИЕ ПРИ АТАКЕ ===")]
-    public float chargeSpeed = 8f; // Скорость приближения к игроку
-    public float maxChargeDistance = 4f; // Максимальное расстояние атаки
+    public float chargeSpeed = 8f;
+    public float maxChargeDistance = 4f;
 
     [Header("=== ВХОДЫ/ВЫХОДЫ ===")]
-    public GameObject arenaEntrance;  // Дверь/стена, закрывающая вход на арену
-    public GameObject victoryExit;    // Выход после победы
+    public GameObject arenaEntrance;  // Препятствие на входе в арену
+    public GameObject victoryExit;    // Препятствие на выходе из арены
 
     [Header("=== КАМЕРА ===")]
     public float zoomSize = 8f;
+
+    [Header("Ссылка на ядро")]
+    public CoreInteractable coreInteractable;
 
     private PlayerController player;
     private SpriteRenderer spriteRenderer;
@@ -54,36 +56,35 @@ public class CoreBoss : MonoBehaviour
     private Camera mainCamera;
     private float originalCameraSize;
 
-    // Состояния босса
     public enum Phase { Full, HornsBroken, Final }
-    public Phase currentPhase = Phase.Full;
+    private Phase currentPhase = Phase.Full;
 
     void Start()
     {
-        // Получаем компоненты
         player = FindObjectOfType<PlayerController>();
         spriteRenderer = GetComponent<SpriteRenderer>();
         mainCamera = Camera.main;
-
-        // Сохраняем оригинальную позицию и настройки камеры
         originalPosition = transform.position;
+
         if (mainCamera != null && mainCamera.orthographic)
         {
             originalCameraSize = mainCamera.orthographicSize;
         }
 
-        // Инициализируем параметры
         ResetAttackTimers();
         currentHits = 0;
         isActive = false;
 
-        Debug.Log("👹 CoreBoss инициализирован (5-ударная система)");
+        // ✅ ИСПРАВЛЕНО: ОБА ПРЕПЯТСТВИЯ ИЗНАЧАЛЬНО НЕАКТИВНЫ
+        if (arenaEntrance != null) arenaEntrance.SetActive(false);
+        if (victoryExit != null) victoryExit.SetActive(false);
+
+        Debug.Log("👹 CoreBoss инициализирован. Вход/выход скрыты.");
     }
 
     void Update()
     {
         if (!isActive || isAttacking || player == null) return;
-
         attackTimer -= Time.deltaTime;
 
         if (attackTimer <= 0)
@@ -107,11 +108,17 @@ public class CoreBoss : MonoBehaviour
         isActive = true;
         Debug.Log("👹 БОСС АКТИВИРОВАН!");
 
-        // Закрываем вход на арену
+        // ✅ ИСПРАВЛЕНО: АКТИВИРУЕМ ОБА ПРЕПЯТСТВИЯ
         if (arenaEntrance != null)
         {
-            arenaEntrance.SetActive(false);
-            Debug.Log("🚪 Вход на арену закрыт");
+            arenaEntrance.SetActive(true); // Блокируем вход
+            Debug.Log("🚪 Вход на арену заблокирован");
+        }
+
+        if (victoryExit != null)
+        {
+            victoryExit.SetActive(true); // Блокируем выход
+            Debug.Log("🔒 Выход из арены заблокирован");
         }
 
         // Увеличиваем камеру
@@ -134,31 +141,68 @@ public class CoreBoss : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Подготовка к атаке: показ предупреждения
-    /// </summary>
+    public void TakeDamage()
+    {
+        if (!isActive) return;
+
+        currentHits++;
+        Debug.Log($"💥 Удар #{currentHits}/{totalHitsRequired}");
+
+        UpdateBossStateAfterHit();
+
+        if (spriteRenderer != null)
+        {
+            StartCoroutine(FlashColor(Color.red, 0.3f));
+        }
+
+        CheckVictoryCondition();
+    }
+
+    void UpdateBossStateAfterHit()
+    {
+        if (currentHits == 2 && currentPhase == Phase.Full)
+        {
+            leftHornBroken = true;
+            rightHornBroken = true;
+            currentPhase = Phase.HornsBroken;
+
+            currentWarningTime = warningTimePhase2;
+            currentPhysicalCooldown *= 0.7f;
+            currentLaserCooldown *= 0.7f;
+            Debug.Log("🦏 РОГА СЛОМАНЫ! Скорость атак увеличена на 30%");
+        }
+        else if (currentHits == 4 && currentPhase == Phase.HornsBroken)
+        {
+            eyeBroken = true;
+            coreExposed = true;
+            currentPhase = Phase.Final;
+
+            currentWarningTime = warningTimePhase3;
+            currentPhysicalCooldown *= 0.6f;
+            currentLaserCooldown *= 0.6f;
+            Debug.Log("👁️ ГЛАЗ СЛОМАН! Скорость атак увеличена на 40%");
+        }
+    }
+
     IEnumerator PrepareAttack()
     {
         isAttacking = true;
-
-        // Случайный выбор атаки (50/50)
         bool isPhysicalAttack = Random.value > 0.5f;
 
         if (isPhysicalAttack)
         {
             UIManager.Instance?.ShowShieldWarning();
-            Debug.Log($"⚠️ ФИЗИЧЕСКАЯ АТАКА! (У вас {currentWarningTime:F1} сек на реакцию)");
+            Debug.Log($"🛡️ ФИЗИЧЕСКАЯ АТАКА! (Предупреждение: {currentWarningTime:F1}с)");
         }
         else
         {
             UIManager.Instance?.ShowHackWarning();
             isLaserAttackQueued = true;
-            Debug.Log($"⚠️ ЛАЗЕРНАЯ АТАКА! (У вас {currentWarningTime:F1} сек на реакцию)");
+            Debug.Log($"💻 ЛАЗЕРНАЯ АТАКА! (Предупреждение: {currentWarningTime:F1}с)");
         }
 
         yield return new WaitForSeconds(currentWarningTime);
 
-        // Запускаем атаку
         if (isPhysicalAttack)
             StartCoroutine(PhysicalAttack());
         else
@@ -168,28 +212,19 @@ public class CoreBoss : MonoBehaviour
         attackTimer = isPhysicalAttack ? currentPhysicalCooldown : currentLaserCooldown;
     }
 
-    /// <summary>
-    /// Физическая атака: босс приближается к игроку
-    /// </summary>
     IEnumerator PhysicalAttack()
     {
-        Debug.Log("💥 ФИЗИЧЕСКАЯ АТАКА! Босс бежит к игроку...");
+        Debug.Log("💥 СТАРТ ФИЗИЧЕСКОЙ АТАКИ");
 
-        // Анимация заряда (если есть)
-        // if (animator != null) animator.SetTrigger("Charge");
-
-        // Босс движется к игроку
         Vector2 targetPosition = player.transform.position;
-        float distanceToPlayer = Vector2.Distance(transform.position, targetPosition);
+        float distance = Vector2.Distance(transform.position, targetPosition);
 
-        // Ограничиваем дистанцию атаки
-        if (distanceToPlayer > maxChargeDistance)
+        if (distance > maxChargeDistance)
         {
-            Vector2 direction = (targetPosition - (Vector2)transform.position).normalized;
-            targetPosition = (Vector2)transform.position + direction * maxChargeDistance;
+            Vector2 dir = (targetPosition - (Vector2)transform.position).normalized;
+            targetPosition = (Vector2)transform.position + dir * maxChargeDistance;
         }
 
-        // Плавное движение к цели
         float startTime = Time.time;
         while (Time.time - startTime < 0.5f)
         {
@@ -197,127 +232,59 @@ public class CoreBoss : MonoBehaviour
             yield return null;
         }
 
-        // Проверяем щит
         if (player != null && player.isShieldActive)
         {
-            // Отражение атаки
-            Debug.Log("🛡️ АТАКА ОТРАЖЕНА! Босс получает удар");
-            currentHits++;
-
-            // Обновляем состояние босса
-            UpdateBossStateAfterHit();
-
-            // Визуальный эффект
-            if (spriteRenderer != null)
-            {
-                StartCoroutine(FlashColor(Color.red, 0.3f));
-            }
+            Debug.Log("✅ АТАКА ОТРАЖЕНА ЩИТОМ!");
+            TakeDamage();
         }
-        else
+        else if (player != null)
         {
-            // Игрок получает урон
-            if (player != null) player.TakeDamage(25);
+            Debug.Log("❌ ИГРОК ПОЛУЧИЛ УРОН ОТ ФИЗИЧЕСКОЙ АТАКИ");
+            player.TakeDamage(25);
         }
 
-        // Возвращаемся на исходную позицию
+        // Возврат на исходную позицию
         startTime = Time.time;
         while (Time.time - startTime < 0.4f)
         {
             transform.position = Vector2.Lerp(transform.position, originalPosition, (Time.time - startTime) * chargeSpeed);
             yield return null;
         }
-
-        // Проверяем победу
-        CheckVictoryCondition();
     }
 
-    /// <summary>
-    /// Лазерная атака: видимый луч от глаза к игроку
-    /// </summary>
     IEnumerator LaserAttack()
     {
-        Debug.Log("🔴 ЛАЗЕРНАЯ АТАКА! Босс целится в игрока...");
-
-        // Анимация подготовки (если есть)
-        // if (animator != null) animator.SetTrigger("LaserCharge");
-
+        Debug.Log("🔴 НАЧАЛО ЛАЗЕРНОЙ АТАКИ");
         yield return new WaitForSeconds(0.8f);
 
         if (isLaserAttackQueued && player != null)
         {
-            Debug.Log("🔥 ЛАЗЕР ЗАПУЩЕН!");
+            Debug.Log("🔥 ЛАЗЕР АКТИВИРОВАН!");
 
-            // Создаём луч ТОЛЬКО если есть LineRenderer
-            if (laserVisual != null)
+            if (laserVisual != null && laserOrigin != null)
             {
-                GameObject laser = Instantiate(laserVisual, transform.position, Quaternion.identity);
+                GameObject laser = Instantiate(laserVisual, laserOrigin.position, Quaternion.identity);
                 LineRenderer line = laser.GetComponent<LineRenderer>();
 
                 if (line != null)
                 {
-                    // Начало луча — позиция laserOrigin (глаз)
-                    Vector3 startPos = laserOrigin != null ? laserOrigin.position : transform.position;
-                    Vector3 endPos = player.transform.position;
-
-                    line.SetPosition(0, startPos);
-                    line.SetPosition(1, endPos);
+                    line.SetPosition(0, laserOrigin.position);
+                    line.SetPosition(1, player.transform.position);
                 }
-
                 Destroy(laser, laserDuration);
             }
 
-            // Урон игроку (если нет щита)
-            if (player != null)
-            {
-                player.TakeDamage(35);
-            }
+            player.TakeDamage(35);
         }
         else
         {
-            Debug.Log("✅ ЛАЗЕРНАЯ АТАКА УСПЕШНО ОТМЕНЕНА ВЗЛОМОМ!");
+            Debug.Log("✅ ЛАЗЕР ОТМЕНЕН ВЗЛОМОМ");
         }
 
         isLaserAttackQueued = false;
         yield return new WaitForSeconds(0.5f);
     }
 
-    /// <summary>
-    /// Обновление состояния босса после удара
-    /// </summary>
-    void UpdateBossStateAfterHit()
-    {
-        // Обновляем фазу в зависимости от количества ударов
-        if (currentHits == 2 && !leftHornBroken && !rightHornBroken)
-        {
-            // Ломаем рога
-            leftHornBroken = true;
-            rightHornBroken = true;
-            currentPhase = Phase.HornsBroken;
-            Debug.Log("🦏 РОГА СЛОМАНЫ! Босс становится быстрее");
-
-            // Ускоряем атаки
-            currentWarningTime = warningTimePhase2;
-            currentPhysicalCooldown *= 0.7f;
-            currentLaserCooldown *= 0.7f;
-        }
-        else if (currentHits == 4 && !eyeBroken && !coreExposed)
-        {
-            // Ломаем глаз и открываем ядро
-            eyeBroken = true;
-            coreExposed = true;
-            currentPhase = Phase.Final;
-            Debug.Log("👁️ ГЛАЗ СЛОМАН! ЯДРО ОТКРЫТО! Босс в финальной фазе");
-
-            // Ещё сильнее ускоряем
-            currentWarningTime = warningTimePhase3;
-            currentPhysicalCooldown *= 0.6f;
-            currentLaserCooldown *= 0.6f;
-        }
-    }
-
-    /// <summary>
-    /// Проверка условия победы
-    /// </summary>
     void CheckVictoryCondition()
     {
         if (currentHits >= totalHitsRequired)
@@ -329,7 +296,6 @@ public class CoreBoss : MonoBehaviour
     IEnumerator FlashColor(Color color, float duration)
     {
         if (spriteRenderer == null) yield break;
-
         Color original = spriteRenderer.color;
         spriteRenderer.color = color;
         yield return new WaitForSeconds(duration);
@@ -341,43 +307,60 @@ public class CoreBoss : MonoBehaviour
     public void HackBoss()
     {
         if (!CanBeHacked()) return;
-
-        Debug.Log("⚡ ВЗЛОМ УСПЕШЕН! Лазер отменён");
         isLaserAttackQueued = false;
 
-        // Визуальный эффект
         if (spriteRenderer != null)
         {
             StartCoroutine(FlashColor(Color.cyan, 0.5f));
         }
+        Debug.Log("⚡ ВЗЛОМ УСПЕШЕН! Лазер деактивирован");
     }
 
     void Die()
     {
-        Debug.Log("💀 БОСС ПОБЕЖДЁН! ВСЕ 5 УДАРОВ НАНЕСЕНЫ");
+        Debug.Log("🎉 БОСС ПОБЕЖДЕН! Все 5 ударов нанесены");
 
-        // Открываем выход
-        if (victoryExit != null)
+        if (arenaEntrance != null)
         {
-            victoryExit.SetActive(true);
-            Debug.Log("🎉 ВЫХОД ОТКРЫТ! Можете покинуть арену");
+            arenaEntrance.SetActive(false);
+            Debug.Log("🚪 Вход на арену открыт");
         }
 
-        // Отключаем босса
-        isActive = false;
-        enabled = false;
+        if (victoryExit != null)
+        {
+            victoryExit.SetActive(false);
+            Debug.Log("✅ Выход из арены открыт");
+        }
 
-        // Событие для GameManager
+        gameObject.SetActive(false);
+
         GameManager.Instance?.BossDefeated();
+
+        OnBossDefeated();
     }
 
-    // Для отладки в редакторе
     void OnDrawGizmosSelected()
     {
         if (laserOrigin != null)
         {
             Gizmos.color = Color.red;
             Gizmos.DrawSphere(laserOrigin.position, 0.2f);
+        }
+    }
+
+    public void OnBossDefeated()
+    {
+        Debug.Log("💥 Босс повержен! Активируем ядро...");
+
+        GameManager.Instance.BossDefeated();
+
+        if (coreInteractable != null)
+        {
+            coreInteractable.ActivateCore();
+        }
+        else
+        {
+            Debug.LogError("❌ CoreInteractable не назначен в инспекторе!");
         }
     }
 }
