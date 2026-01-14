@@ -6510,7 +6510,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   player: {fileID: 2092224187}
   offset: {x: 0, y: 0, z: -10}
-  leftLimit: -10
+  leftLimit: -7
   rightLimit: 200
   bottomLimit: -10
   topLimit: 15
