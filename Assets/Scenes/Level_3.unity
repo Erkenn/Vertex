@@ -851,7 +851,7 @@ MonoBehaviour:
   player: {fileID: 1242141174}
   offset: {x: 0, y: 0, z: -10}
   leftLimit: -7
-  rightLimit: 150
+  rightLimit: 175
   bottomLimit: -10
   topLimit: 15
 --- !u!1001 &195817873
