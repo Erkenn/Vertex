@@ -3665,7 +3665,19 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 566935146}
   m_OnClick:
     m_PersistentCalls:
-      m_Calls: []
+      m_Calls:
+      - m_Target: {fileID: 1211626660}
+        m_TargetAssemblyTypeName: MainMenuManager, Assembly-CSharp
+        m_MethodName: ShowRegisterFields
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
 --- !u!114 &566935146
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -11336,7 +11348,19 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 1450655016}
   m_OnClick:
     m_PersistentCalls:
-      m_Calls: []
+      m_Calls:
+      - m_Target: {fileID: 1211626660}
+        m_TargetAssemblyTypeName: MainMenuManager, Assembly-CSharp
+        m_MethodName: ShowLoginFields
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
 --- !u!114 &1450655016
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -12041,7 +12065,7 @@ MonoBehaviour:
       m_Calls: []
   m_text: "\u0423\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u0438\u0435:\na-\u0434\u0432\u0438\u0436\u0435\u043D\u0438\u0435
     \u0432\u043B\u0435\u0432\u043E\nd-\u0434\u0432\u0438\u0436\u0435\u043D\u0438\u0435
-    \u0432\u043F\u0440\u0430\u0432\u043E\nw/\u043F\u0440\u043E\u0431\u0435\u043B-\u043F\u0440\u044B\u0436\u043E\u043A\ns-\u043F\u0440\u0438\u0441\u0435\u0434\u0430\u043D\u0438\u0435\no-\u0449\u0438\u0442\np-\u0432\u0437\u043B\u043E\u043C"
+    \u0432\u043F\u0440\u0430\u0432\u043E\nw/\u043F\u0440\u043E\u0431\u0435\u043B-\u043F\u0440\u044B\u0436\u043E\u043A\ns-\u043F\u0440\u0438\u0441\u0435\u0434\u0430\u043D\u0438\u0435\no-\u0449\u0438\u0442\np-\u0432\u0437\u043B\u043E\u043C\ne-\u0432\u0437\u0430\u0438\u043C\u043E\u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 05dca6613e9944744bf723852fa0dfe4, type: 2}
   m_sharedMaterial: {fileID: 8115152620139440659, guid: 05dca6613e9944744bf723852fa0dfe4, type: 2}

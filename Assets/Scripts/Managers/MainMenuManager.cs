@@ -703,6 +703,7 @@ public class MainMenuManager : MonoBehaviour
     {
         if (loginFields != null) loginFields.SetActive(false);
         if (registerFields != null) registerFields.SetActive(true);
+        else Debug.LogError("❌ registerFields == null! Проверьте имя объекта в сцене.");
     }
 
     public void ShowStatsPanel()
