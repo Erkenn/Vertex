@@ -2701,8 +2701,13 @@ MonoBehaviour:
   readyColor: {r: 0.7987421, g: 0.15321769, b: 0.15321769, a: 1}
   activeColor: {r: 0, g: 1, b: 0.2, a: 1}
   usedColor: {r: 0.78616345, g: 0.756659, b: 0.2793599, a: 1}
+  hintPanel: {fileID: 0}
+  hintText: {fileID: 0}
+  hintMessage: "\u041D\u0430\u0436\u043C\u0438\u0442\u0435 E"
+  usedMessage: "\u0423\u0436\u0435 \u0438\u0441\u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u043D\u043E"
+  hintOffsetY: 1
   activationParticles: {fileID: 0}
-  activationSound: {fileID: 0}
+  activationSound: {fileID: 8300000, guid: 9dd5c093175174f4a93242774394ddbc, type: 3}
   onComputerActivated:
     m_PersistentCalls:
       m_Calls:
@@ -9662,8 +9667,13 @@ MonoBehaviour:
   readyColor: {r: 0.7987421, g: 0.15321769, b: 0.15321769, a: 1}
   activeColor: {r: 0, g: 1, b: 0.2, a: 1}
   usedColor: {r: 0.78616345, g: 0.756659, b: 0.2793599, a: 1}
+  hintPanel: {fileID: 0}
+  hintText: {fileID: 0}
+  hintMessage: "\u041D\u0430\u0436\u043C\u0438\u0442\u0435 E"
+  usedMessage: "\u0423\u0436\u0435 \u0438\u0441\u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u043D\u043E"
+  hintOffsetY: 1
   activationParticles: {fileID: 0}
-  activationSound: {fileID: 0}
+  activationSound: {fileID: 8300000, guid: 9dd5c093175174f4a93242774394ddbc, type: 3}
   onComputerActivated:
     m_PersistentCalls:
       m_Calls:
@@ -10230,8 +10240,13 @@ MonoBehaviour:
   readyColor: {r: 0.7987421, g: 0.15321769, b: 0.15321769, a: 1}
   activeColor: {r: 0, g: 1, b: 0.2, a: 1}
   usedColor: {r: 0.78616345, g: 0.756659, b: 0.2793599, a: 1}
+  hintPanel: {fileID: 0}
+  hintText: {fileID: 0}
+  hintMessage: "\u041D\u0430\u0436\u043C\u0438\u0442\u0435 E"
+  usedMessage: "\u0423\u0436\u0435 \u0438\u0441\u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u043D\u043E"
+  hintOffsetY: 1
   activationParticles: {fileID: 0}
-  activationSound: {fileID: 0}
+  activationSound: {fileID: 8300000, guid: 9dd5c093175174f4a93242774394ddbc, type: 3}
   onComputerActivated:
     m_PersistentCalls:
       m_Calls:
@@ -11106,6 +11121,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 6342878908060285238, guid: 06ed0faa4ef9dfd4c87fb5940e09eb31, type: 3}
+      propertyPath: collectSound
+      value: 
+      objectReference: {fileID: 8300000, guid: 0dffbf892f2a9054a9280b66831685d2, type: 3}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -16308,6 +16327,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 6342878908060285238, guid: 06ed0faa4ef9dfd4c87fb5940e09eb31, type: 3}
+      propertyPath: collectSound
+      value: 
+      objectReference: {fileID: 8300000, guid: 0dffbf892f2a9054a9280b66831685d2, type: 3}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -18161,8 +18184,13 @@ MonoBehaviour:
   readyColor: {r: 0.7987421, g: 0.15321769, b: 0.15321769, a: 1}
   activeColor: {r: 0, g: 1, b: 0.2, a: 1}
   usedColor: {r: 0.78616345, g: 0.756659, b: 0.2793599, a: 1}
+  hintPanel: {fileID: 0}
+  hintText: {fileID: 0}
+  hintMessage: "\u041D\u0430\u0436\u043C\u0438\u0442\u0435 E"
+  usedMessage: "\u0423\u0436\u0435 \u0438\u0441\u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u043D\u043E"
+  hintOffsetY: 1
   activationParticles: {fileID: 0}
-  activationSound: {fileID: 0}
+  activationSound: {fileID: 8300000, guid: 9dd5c093175174f4a93242774394ddbc, type: 3}
   onComputerActivated:
     m_PersistentCalls:
       m_Calls:
@@ -18962,6 +18990,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 6342878908060285238, guid: 06ed0faa4ef9dfd4c87fb5940e09eb31, type: 3}
+      propertyPath: collectSound
+      value: 
+      objectReference: {fileID: 8300000, guid: 0dffbf892f2a9054a9280b66831685d2, type: 3}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
