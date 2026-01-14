@@ -300,14 +300,76 @@ public class FirebaseRestManager : MonoBehaviour
     public void SaveBestGameTime(float totalTime)
     {
         if (!IsAuthenticated) return;
-        var data = new Dictionary<string, object>
+
+        var personalData = new Dictionary<string, object>
     {
         { "bestTime", totalTime },
         { "timestamp", DateTime.UtcNow.ToUnixTimeSeconds() }
     };
-        string json = Json.Serialize(data);
-        string path = $"users/{currentUserId}/bestGameTime";
-        StartCoroutine(PutDataCoroutine(path, json));
+        string personalJson = Json.Serialize(personalData);
+        string personalPath = $"users/{currentUserId}/bestGameTime";
+        StartCoroutine(PutDataCoroutine(personalPath, personalJson));
+
+        string displayName = PlayerPrefs.GetString("PlayerName",
+            PlayerPrefs.GetString("PlayerEmail", "Игрок").Split('@')[0]);
+
+        var leaderboardEntry = new Dictionary<string, object>
+    {
+        { "displayName", displayName },
+        { "totalTime", totalTime },
+        { "timestamp", DateTime.UtcNow.ToUnixTimeSeconds() }
+    };
+        string leaderboardJson = Json.Serialize(leaderboardEntry);
+        string leaderboardPath = $"leaderboard/{currentUserId}";
+        StartCoroutine(PutDataCoroutine(leaderboardPath, leaderboardJson));
+
+        Debug.Log($"✅ Рекорд сохранён в глобальный лидерборд");
+    }
+
+    public void LoadGlobalLeaderboard(Action<List<LeaderboardEntry>> callback)
+    {
+        string path = "leaderboard";
+        StartCoroutine(GetDataCoroutine(path, (json) =>
+        {
+            var entries = new List<LeaderboardEntry>();
+
+            if (!string.IsNullOrEmpty(json) && json != "null")
+            {
+                try
+                {
+                    var root = Json.Deserialize(json) as Dictionary<string, object>;
+                    if (root != null)
+                    {
+                        foreach (var kvp in root)
+                        {
+                            var userData = kvp.Value as Dictionary<string, object>;
+                            if (userData != null && userData.ContainsKey("totalTime"))
+                            {
+                                float totalTime = Convert.ToSingle(userData["totalTime"]);
+                                string displayName = userData.ContainsKey("displayName")
+                                    ? userData["displayName"].ToString()
+                                    : "Аноним";
+
+                                entries.Add(new LeaderboardEntry
+                                {
+                                    UserId = kvp.Key,
+                                    DisplayName = displayName,
+                                    TotalTime = totalTime
+                                });
+                            }
+                        }
+                    }
+                }
+                catch (Exception e)
+                {
+                    Debug.LogError($"Ошибка загрузки лидерборда: {e}");
+                }
+            }
+
+            // Сортируем от лучшего к худшему
+            entries.Sort((a, b) => a.TotalTime.CompareTo(b.TotalTime));
+            callback?.Invoke(entries);
+        }));
     }
 
     public void LoadBestGameTime(Action<float> onLoaded)

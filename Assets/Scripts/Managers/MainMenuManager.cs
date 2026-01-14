@@ -6,6 +6,7 @@ using System.Text;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine.Video;
+using System.Linq;
 
 public class MainMenuManager : MonoBehaviour
 {
@@ -86,6 +87,8 @@ public class MainMenuManager : MonoBehaviour
     private Dictionary<int, float> userBestTimes = new Dictionary<int, float>();
     private Dictionary<int, int> userCoins = new Dictionary<int, int>();
     private float userBestGameTime = Mathf.Infinity;
+    private List<LeaderboardEntry> globalLeaderboard = new List<LeaderboardEntry>();
+    private int currentPlayerRank = -1;
 
     void Awake()
     {
@@ -110,7 +113,46 @@ public class MainMenuManager : MonoBehaviour
     {
         Debug.Log("🔐 Состояние авторизации изменилось — загружаем статистику");
         UpdateAuthStatus();
+        FirebaseRestManager.Instance.LoadGlobalLeaderboard((entries) =>
+        {
+            globalLeaderboard = entries.Take(3).ToList(); // Топ-3
+            UpdateCurrentPlayerRank();
+            UpdateStatsContent(); // обновляем UI
+        });
         LoadAllLevelProgressFromFirebase();
+    }
+
+    void UpdateCurrentPlayerRank()
+    {
+        if (FirebaseRestManager.Instance == null || string.IsNullOrEmpty(FirebaseRestManager.Instance.CurrentUserId))
+        {
+            currentPlayerRank = -1;
+            return;
+        }
+
+        string currentUserId = FirebaseRestManager.Instance.CurrentUserId;
+        for (int i = 0; i < globalLeaderboard.Count; i++)
+        {
+            if (globalLeaderboard[i].UserId == currentUserId)
+            {
+                currentPlayerRank = i + 1;
+                return;
+            }
+        }
+
+        FirebaseRestManager.Instance.LoadGlobalLeaderboard((allEntries) =>
+        {
+            for (int i = 0; i < allEntries.Count; i++)
+            {
+                if (allEntries[i].UserId == currentUserId)
+                {
+                    currentPlayerRank = i + 1;
+                    UpdateStatsContent();
+                    return;
+                }
+            }
+            currentPlayerRank = -1;
+        });
     }
 
     void Start()
@@ -946,47 +988,91 @@ public class MainMenuManager : MonoBehaviour
     }
 
     void OnViewStats()
-{
-    Debug.Log("📊 OnViewStats вызван!");
-    
-    if (FirebaseRestManager.Instance != null && FirebaseRestManager.Instance.IsAuthenticated)
     {
-        Debug.Log("✅ Пользователь авторизован — показываем статистику");
-        ShowStatsPanel();
-    }
-    else
-    {
-        Debug.Log("❌ Пользователь НЕ авторизован");
-        if (authStatusText != null)
+        Debug.Log("📊 OnViewStats вызван!");
+
+        if (FirebaseRestManager.Instance != null && FirebaseRestManager.Instance.IsAuthenticated)
         {
-            authStatusText.text = "Сначала войдите в аккаунт";
-            authStatusText.color = Color.red;
+            Debug.Log("✅ Пользователь авторизован — загружаем статистику и лидерборд");
+
+            // Загружаем ГЛОБАЛЬНЫЙ лидерборд
+            FirebaseRestManager.Instance.LoadGlobalLeaderboard((entries) =>
+            {
+                globalLeaderboard = entries;
+
+                // Находим место текущего игрока
+                string currentUserId = FirebaseRestManager.Instance.CurrentUserId;
+                currentPlayerRank = -1;
+
+                for (int i = 0; i < globalLeaderboard.Count; i++)
+                {
+                    if (globalLeaderboard[i].UserId == currentUserId)
+                    {
+                        currentPlayerRank = i + 1; // 1-based
+                        break;
+                    }
+                }
+
+                // Обновляем UI
+                UpdateStatsContent();
+            });
+
+            // Показываем панель (даже если данные ещё грузятся)
+            ShowStatsPanel();
+        }
+        else
+        {
+            Debug.Log("❌ Пользователь НЕ авторизован");
+            if (authStatusText != null)
+            {
+                authStatusText.text = "Сначала войдите в аккаунт";
+                authStatusText.color = Color.red;
+            }
         }
     }
-}
 
     void UpdateStatsContent()
     {
         if (statsContent == null) return;
 
         StringBuilder sb = new StringBuilder();
-        bool hasAnyData = false;
 
-        // Общий рекорд игры (если сохраняете его в Firebase)
+        // === ЛИЧНАЯ СТАТИСТИКА ===
         if (userBestGameTime < Mathf.Infinity)
         {
-            sb.AppendLine($"<b>🏆 ЛУЧШЕЕ ВРЕМЯ ПРОХОЖДЕНИЯ</b>");
+            sb.AppendLine($"<b>🏆 ВАШЕ ЛУЧШЕЕ ВРЕМЯ</b>");
             sb.AppendLine($"⏱ {FormatTime(userBestGameTime)}\n");
-            hasAnyData = true;
         }
 
-        // Рекорды по уровням
+        // === ГЛОБАЛЬНЫЙ ТОП-3 ===
+        if (globalLeaderboard.Count > 0)
+        {
+            sb.AppendLine("<b>🌍 ГЛОБАЛЬНЫЙ ТОП-3</b>");
+            for (int i = 0; i < Mathf.Min(3, globalLeaderboard.Count); i++)
+            {
+                var entry = globalLeaderboard[i];
+                string medal = i == 0 ? "🥇" : (i == 1 ? "🥈" : "🥉");
+                sb.AppendLine($"{medal} {entry.DisplayName}: {FormatTime(entry.TotalTime)}");
+            }
+            sb.AppendLine("");
+        }
+
+        // === ВАШЕ МЕСТО ===
+        if (currentPlayerRank > 0)
+        {
+            string placeText = currentPlayerRank <= 3 ? "🏆 Вы в топ-3!" : $"📍 Ваше место: #{currentPlayerRank}";
+            sb.AppendLine(placeText);
+            sb.AppendLine("");
+        }
+
+        // === РЕКОРДЫ ПО УРОВНЯМ ===
+        bool hasLevelData = false;
         for (int level = 1; level <= 5; level++)
         {
             if (userBestTimes.TryGetValue(level, out float bestTime) && bestTime > 0)
             {
+                hasLevelData = true;
                 int coins = userCoins.TryGetValue(level, out int c) ? c : 0;
-                hasAnyData = true;
                 sb.AppendLine($"<b>Уровень {level}</b>");
                 sb.AppendLine($"  ⏱ Время: {FormatTime(bestTime)}");
                 sb.AppendLine($"  🪙 Монеты: {coins}");
@@ -994,7 +1080,7 @@ public class MainMenuManager : MonoBehaviour
             }
         }
 
-        if (!hasAnyData)
+        if (userBestGameTime == Mathf.Infinity && !hasLevelData)
         {
             sb.AppendLine("Нет сохранённых рекордов.");
         }
