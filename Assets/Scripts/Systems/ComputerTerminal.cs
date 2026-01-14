@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 using UnityEngine.Events;
+using UnityEngine.UI;
 using System.Collections;
 
 public class ComputerTerminal : MonoBehaviour
@@ -18,6 +19,13 @@ public class ComputerTerminal : MonoBehaviour
     public Color activeColor = new Color(0f, 1f, 0.2f, 1f); // Ярко-зеленый (активен)
     public Color usedColor = new Color(0.5f, 0.5f, 0.5f, 1f); // Серый (использован)
 
+    [Header("Подсказка для игрока")]
+    public GameObject hintPanel; // Панель с текстом (Canvas -> Panel)
+    public Text hintText; // Текстовый компонент
+    public string hintMessage = "Нажмите E"; // Текст подсказки
+    public string usedMessage = "Уже использовано"; // Текст когда использован
+    public float hintOffsetY = 1.0f; // Смещение подсказки над объектом
+
     [Header("Эффекты")]
     public ParticleSystem activationParticles;
     public AudioClip activationSound;
@@ -28,6 +36,7 @@ public class ComputerTerminal : MonoBehaviour
     private SpriteRenderer spriteRenderer;
     private bool playerInRange = false;
     private AudioSource audioSource;
+    private GameObject hintInstance; // Экземпляр подсказки
 
     void Start()
     {
@@ -36,10 +45,22 @@ public class ComputerTerminal : MonoBehaviour
         if (audioSource == null) audioSource = gameObject.AddComponent<AudioSource>();
 
         UpdateVisual();
+
+        // Если панель подсказки не назначена, создаем простую по умолчанию
+        if (hintPanel == null)
+        {
+            CreateDefaultHint();
+        }
     }
 
     void Update()
     {
+        // Обновляем позицию подсказки если она активна
+        if (hintInstance != null && hintInstance.activeSelf)
+        {
+            UpdateHintPosition();
+        }
+
         // Проверяем можно ли нажимать
         bool canActivate = playerInRange &&
                           Input.GetKeyDown(activationKey) &&
@@ -76,8 +97,9 @@ public class ComputerTerminal : MonoBehaviour
         // Вызываем событие
         onComputerActivated?.Invoke();
 
-        // Обновляем визуал
+        // Обновляем визуал и подсказку
         UpdateVisual();
+        UpdateHintText();
 
         Debug.Log($"🖥 Компьютер {gameObject.name} активирован. Повторное использование: {(canBeReused ? "ДА" : "НЕТ")}");
     }
@@ -104,6 +126,100 @@ public class ComputerTerminal : MonoBehaviour
         }
     }
 
+    void UpdateHintText()
+    {
+        if (hintText != null)
+        {
+            hintText.text = used && !canBeReused ? usedMessage : hintMessage;
+        }
+    }
+
+    void UpdateHintPosition()
+    {
+        if (hintInstance != null)
+        {
+            // Позиция над компьютером с учетом смещения
+            Vector3 hintPosition = transform.position + Vector3.up * hintOffsetY;
+            hintInstance.transform.position = Camera.main.WorldToScreenPoint(hintPosition);
+        }
+    }
+
+    void ShowHint()
+    {
+        if (hintPanel == null) return;
+
+        // Если подсказка еще не создана
+        if (hintInstance == null)
+        {
+            // Создаем подсказку в Canvas
+            Canvas canvas = FindObjectOfType<Canvas>();
+            if (canvas == null)
+            {
+                Debug.LogError("Не найден Canvas в сцене! Создайте UI Canvas.");
+                return;
+            }
+
+            hintInstance = Instantiate(hintPanel, canvas.transform);
+            hintText = hintInstance.GetComponentInChildren<Text>();
+        }
+
+        // Обновляем текст и показываем
+        UpdateHintText();
+        hintInstance.SetActive(true);
+        UpdateHintPosition();
+    }
+
+    void HideHint()
+    {
+        if (hintInstance != null)
+        {
+            hintInstance.SetActive(false);
+        }
+    }
+
+    void CreateDefaultHint()
+    {
+        // Автоматически создаем простую подсказку если не настроена вручную
+        Canvas canvas = FindObjectOfType<Canvas>();
+        if (canvas == null)
+        {
+            GameObject canvasObj = new GameObject("InteractionCanvas");
+            canvas = canvasObj.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvasObj.AddComponent<CanvasScaler>();
+            canvasObj.AddComponent<GraphicRaycaster>();
+        }
+
+        hintPanel = new GameObject("HintPanel");
+        hintPanel.transform.SetParent(canvas.transform);
+
+        // Добавляем компоненты
+        RectTransform rect = hintPanel.AddComponent<RectTransform>();
+        rect.sizeDelta = new Vector2(200, 50);
+
+        Image image = hintPanel.AddComponent<Image>();
+        image.color = new Color(0, 0, 0, 0.7f);
+
+        // Создаем текст
+        GameObject textObj = new GameObject("HintText");
+        textObj.transform.SetParent(hintPanel.transform);
+
+        RectTransform textRect = textObj.AddComponent<RectTransform>();
+        textRect.anchorMin = Vector2.zero;
+        textRect.anchorMax = Vector2.one;
+        textRect.offsetMin = Vector2.zero;
+        textRect.offsetMax = Vector2.zero;
+
+        hintText = textObj.AddComponent<Text>();
+        hintText.text = hintMessage;
+        hintText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        hintText.fontSize = 20;
+        hintText.color = Color.white;
+        hintText.alignment = TextAnchor.MiddleCenter;
+
+        hintPanel.SetActive(false);
+    }
+
     void PlaySound(AudioClip clip)
     {
         if (clip != null && audioSource != null)
@@ -114,9 +230,10 @@ public class ComputerTerminal : MonoBehaviour
 
     void OnTriggerEnter2D(Collider2D other)
     {
-        if (other.CompareTag("Player"))
+        if (other.CompareTag("Player") && !used)
         {
             playerInRange = true;
+            ShowHint();
         }
     }
 
@@ -125,6 +242,7 @@ public class ComputerTerminal : MonoBehaviour
         if (other.CompareTag("Player"))
         {
             playerInRange = false;
+            HideHint();
         }
     }
 
@@ -141,5 +259,14 @@ public class ComputerTerminal : MonoBehaviour
     {
         Gizmos.color = used ? usedColor : readyColor;
         Gizmos.DrawWireSphere(transform.position, activationRadius);
+    }
+
+    void OnDestroy()
+    {
+        // Уничтожаем подсказку при удалении объекта
+        if (hintInstance != null)
+        {
+            Destroy(hintInstance);
+        }
     }
 }
