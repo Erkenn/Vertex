@@ -4,6 +4,8 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Text;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 public class FirebaseRestManager : MonoBehaviour
 {
@@ -337,26 +339,26 @@ public class FirebaseRestManager : MonoBehaviour
             {
                 try
                 {
-                    var root = Json.Deserialize(json) as Dictionary<string, object>;
-                    if (root != null)
+                    // Парсим как JObject — поддерживает вложенные объекты
+                    var root = JObject.Parse(json);
+                    foreach (var kvp in root)
                     {
-                        foreach (var kvp in root)
-                        {
-                            var userData = kvp.Value as Dictionary<string, object>;
-                            if (userData != null && userData.ContainsKey("totalTime"))
-                            {
-                                float totalTime = Convert.ToSingle(userData["totalTime"]);
-                                string displayName = userData.ContainsKey("displayName")
-                                    ? userData["displayName"].ToString()
-                                    : "Аноним";
+                        var userId = kvp.Key;
+                        var userData = kvp.Value as JObject;
 
-                                entries.Add(new LeaderboardEntry
-                                {
-                                    UserId = kvp.Key,
-                                    DisplayName = displayName,
-                                    TotalTime = totalTime
-                                });
-                            }
+                        if (userData != null && userData.ContainsKey("totalTime"))
+                        {
+                            float totalTime = userData["totalTime"].Value<float>();
+                            string displayName = userData.ContainsKey("displayName")
+                                ? userData["displayName"].Value<string>()
+                                : "Аноним";
+
+                            entries.Add(new LeaderboardEntry
+                            {
+                                UserId = userId,
+                                DisplayName = displayName,
+                                TotalTime = totalTime
+                            });
                         }
                     }
                 }
@@ -369,6 +371,7 @@ public class FirebaseRestManager : MonoBehaviour
             // Сортируем от лучшего к худшему
             entries.Sort((a, b) => a.TotalTime.CompareTo(b.TotalTime));
             callback?.Invoke(entries);
+            Debug.Log($"[LEADERBOARD] Загружено записей: {entries.Count}");
         }));
     }
 
@@ -415,6 +418,7 @@ public class FirebaseRestManager : MonoBehaviour
 
             if (request.result == UnityWebRequest.Result.Success)
             {
+                Debug.Log("[FIREBASE] Успешный ответ");
                 callback?.Invoke(request.downloadHandler.text);
             }
             else

@@ -115,7 +115,7 @@ public class MainMenuManager : MonoBehaviour
         UpdateAuthStatus();
         FirebaseRestManager.Instance.LoadGlobalLeaderboard((entries) =>
         {
-            globalLeaderboard = entries.Take(3).ToList(); // Топ-3
+            globalLeaderboard = new List<LeaderboardEntry>(entries);
             UpdateCurrentPlayerRank();
             UpdateStatsContent(); // обновляем UI
         });
@@ -998,6 +998,8 @@ public class MainMenuManager : MonoBehaviour
             // Загружаем ГЛОБАЛЬНЫЙ лидерборд
             FirebaseRestManager.Instance.LoadGlobalLeaderboard((entries) =>
             {
+                Debug.Log("🔥 LoadGlobalLeaderboard вызван");
+                string path = "leaderboard";
                 globalLeaderboard = entries;
 
                 // Находим место текущего игрока
@@ -1018,6 +1020,7 @@ public class MainMenuManager : MonoBehaviour
             });
 
             // Показываем панель (даже если данные ещё грузятся)
+            Debug.Log($"[STATS] Загружено записей: {globalLeaderboard.Count}");
             ShowStatsPanel();
         }
         else
@@ -1048,9 +1051,10 @@ public class MainMenuManager : MonoBehaviour
         if (globalLeaderboard.Count > 0)
         {
             sb.AppendLine("<b>🌍 ГЛОБАЛЬНЫЙ ТОП-3</b>");
-            for (int i = 0; i < Mathf.Min(3, globalLeaderboard.Count); i++)
+            var top3 = globalLeaderboard.Take(3);
+            for (int i = 0; i < top3.Count(); i++)
             {
-                var entry = globalLeaderboard[i];
+                var entry = top3.ElementAt(i);
                 string medal = i == 0 ? "🥇" : (i == 1 ? "🥈" : "🥉");
                 sb.AppendLine($"{medal} {entry.DisplayName}: {FormatTime(entry.TotalTime)}");
             }
