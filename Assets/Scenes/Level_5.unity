@@ -3677,7 +3677,7 @@ SpriteRenderer:
   m_LightmapParameters: {fileID: 0}
   m_SortingLayerID: 0
   m_SortingLayer: 0
-  m_SortingOrder: 0
+  m_SortingOrder: -1
   m_Sprite: {fileID: 360019088151920980, guid: ac1e979ada5d6414c9e58dfcbb9d7f92, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -4335,7 +4335,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   player: {fileID: 2092224187}
   offset: {x: 0, y: 0, z: -10}
-  leftLimit: -10
+  leftLimit: -7
   rightLimit: 150
   bottomLimit: -10
   topLimit: 15
@@ -10629,6 +10629,11 @@ MonoBehaviour:
   readyColor: {r: 0.7987421, g: 0.15321769, b: 0.15321769, a: 1}
   activeColor: {r: 0, g: 1, b: 0.2, a: 1}
   usedColor: {r: 0.78616345, g: 0.756659, b: 0.2793599, a: 1}
+  hintPanel: {fileID: 0}
+  hintText: {fileID: 0}
+  hintMessage: "\u041D\u0430\u0436\u043C\u0438\u0442\u0435 E"
+  usedMessage: "\u0423\u0436\u0435 \u0438\u0441\u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u043D\u043E"
+  hintOffsetY: 1
   activationParticles: {fileID: 0}
   activationSound: {fileID: 0}
   onComputerActivated:
