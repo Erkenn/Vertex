@@ -83,6 +83,10 @@ public class MainMenuManager : MonoBehaviour
     // Для настроек
     private Resolution[] availableResolutions;
 
+    private Dictionary<int, float> userBestTimes = new Dictionary<int, float>();
+    private Dictionary<int, int> userCoins = new Dictionary<int, int>();
+    private float userBestGameTime = Mathf.Infinity;
+
     void Awake()
     {
         // Система синглтона с защитой от дублирования
@@ -91,6 +95,7 @@ public class MainMenuManager : MonoBehaviour
             Instance = this;
             DontDestroyOnLoad(gameObject);
             SceneManager.sceneLoaded += OnSceneLoaded;
+            FirebaseRestManager.OnAuthStateChanged += OnFirebaseAuthChanged;
             Debug.Log("✅ MainMenuManager создан как постоянный объект");
         }
         else if (Instance != this)
@@ -99,6 +104,13 @@ public class MainMenuManager : MonoBehaviour
             Destroy(gameObject);
             return;
         }
+    }
+
+    void OnFirebaseAuthChanged()
+    {
+        Debug.Log("🔐 Состояние авторизации изменилось — загружаем статистику");
+        UpdateAuthStatus();
+        LoadAllLevelProgressFromFirebase();
     }
 
     void Start()
@@ -230,6 +242,10 @@ public class MainMenuManager : MonoBehaviour
 
         if (scene.name == "MainMenu")
         {
+            if (FirebaseRestManager.Instance != null && FirebaseRestManager.Instance.IsAuthenticated)
+            {
+                LoadAllLevelProgressFromFirebase();
+            }
             // Если UI уже инициализирован, просто обновляем ссылки
             if (uiInitialized)
             {
@@ -421,6 +437,19 @@ public class MainMenuManager : MonoBehaviour
         }
 
         return null;
+    }
+
+    public void Logout()
+    {
+        FirebaseRestManager.Instance.SignOut();
+
+        // Очищаем кэш статистики
+        userBestTimes.Clear();
+        userCoins.Clear();
+        userBestGameTime = Mathf.Infinity;
+        UpdateStatsContent(); // покажет "Нет данных"
+
+        UpdateAuthStatus();
     }
 
     // === НАСТРОЙКА КНОПОК И СОБЫТИЙ ===
@@ -844,25 +873,31 @@ public class MainMenuManager : MonoBehaviour
     {
         if (!FirebaseRestManager.Instance.IsAuthenticated) return;
 
+        userBestTimes.Clear();
+        userCoins.Clear();
+        userBestGameTime = Mathf.Infinity;
+
+        // Загружаем общий рекорд
+        FirebaseRestManager.Instance.LoadBestGameTime((time) =>
+        {
+            userBestGameTime = time;
+            UpdateStatsContent();
+        });
+
+        // Загружаем уровни
         for (int level = 1; level <= 5; level++)
         {
-            FirebaseRestManager.Instance.LoadLevelProgress(level, (coins, time) => {
+            int lvl = level;
+            FirebaseRestManager.Instance.LoadLevelProgress(lvl, (coins, time) =>
+            {
                 if (time > 0)
                 {
-                    float currentBest = PlayerPrefs.GetFloat($"Level_{level}_BestTime", Mathf.Infinity);
-
-                    if (time < currentBest)
-                    {
-                        PlayerPrefs.SetFloat($"Level_{level}_BestTime", time);
-                        PlayerPrefs.SetInt($"Level_{level}_Coins", coins);
-                        PlayerPrefs.Save();
-                        Debug.Log($"📥 Обновлён рекорд уровня {level} из Firebase");
-                    }
+                    userBestTimes[lvl] = time;
+                    userCoins[lvl] = coins;
                 }
+                UpdateStatsContent();
             });
         }
-
-        UpdateStatsContent();
     }
 
     void OnRegister()
@@ -936,23 +971,20 @@ public class MainMenuManager : MonoBehaviour
         StringBuilder sb = new StringBuilder();
         bool hasAnyData = false;
 
-        // Загружаем общий лучший результат игры
-        float bestGameTime = PlayerPrefs.GetFloat("BestCompletionTime", Mathf.Infinity);
-        if (bestGameTime < Mathf.Infinity)
+        // Общий рекорд игры (если сохраняете его в Firebase)
+        if (userBestGameTime < Mathf.Infinity)
         {
             sb.AppendLine($"<b>🏆 ЛУЧШЕЕ ВРЕМЯ ПРОХОЖДЕНИЯ</b>");
-            sb.AppendLine($"⏱ {FormatTime(bestGameTime)}\n");
+            sb.AppendLine($"⏱ {FormatTime(userBestGameTime)}\n");
             hasAnyData = true;
         }
 
-        // Загружаем лучшие результаты по уровням
+        // Рекорды по уровням
         for (int level = 1; level <= 5; level++)
         {
-            float bestTime = PlayerPrefs.GetFloat($"Level_{level}_BestTime", Mathf.Infinity);
-            int coins = PlayerPrefs.GetInt($"Level_{level}_Coins", 0);
-
-            if (bestTime < Mathf.Infinity)
+            if (userBestTimes.TryGetValue(level, out float bestTime) && bestTime > 0)
             {
+                int coins = userCoins.TryGetValue(level, out int c) ? c : 0;
                 hasAnyData = true;
                 sb.AppendLine($"<b>Уровень {level}</b>");
                 sb.AppendLine($"  ⏱ Время: {FormatTime(bestTime)}");
@@ -992,12 +1024,14 @@ public class MainMenuManager : MonoBehaviour
     void StartTutorialAfterRegister()
     {
         CloseTutorialPanels();
+        CutsceneManager.DestroyInstance();
         LoadScene("Tutorial");
     }
 
     void StartTutorialAfterLogin()
     {
         CloseTutorialPanels();
+        CutsceneManager.DestroyInstance();
         LoadScene("Tutorial");
     }
 
@@ -1078,12 +1112,21 @@ public class MainMenuManager : MonoBehaviour
             AudioManager.Instance.StopMusic();
         }
 
-        // Убеждаемся, что CutsceneManager существует
         if (CutsceneManager.Instance == null)
         {
-            Debug.LogError("❌ CutsceneManager не найден! Загружаем Level_1 напрямую.");
-            SceneManager.LoadScene("Level_1");
-            yield break;
+            Debug.Log("🔄 Загружаем CutsceneManager из префаба");
+
+            GameObject prefab = Resources.Load<GameObject>("Prefabs/CutsceneManager");
+            if (prefab != null)
+            {
+                Instantiate(prefab);
+            }
+            else
+            {
+                Debug.LogError("❌ Префаб CutsceneManager не найден в Resources/Prefabs/");
+                SceneManager.LoadScene("Level_1");
+                yield break;
+            }
         }
 
         // Загружаем видео из Resources
@@ -1134,5 +1177,6 @@ public class MainMenuManager : MonoBehaviour
     void OnDestroy()
     {
         SceneManager.sceneLoaded -= OnSceneLoaded;
+        FirebaseRestManager.OnAuthStateChanged -= OnFirebaseAuthChanged;
     }
 }

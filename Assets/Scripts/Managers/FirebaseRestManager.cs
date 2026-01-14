@@ -18,6 +18,7 @@ public class FirebaseRestManager : MonoBehaviour
     private string idToken;
     private string refreshToken;
     private float tokenExpiryTime;
+    public static event Action OnAuthStateChanged;
 
     public bool IsAuthenticated => !string.IsNullOrEmpty(currentUserId) && !string.IsNullOrEmpty(idToken);
     public string CurrentUserId => currentUserId;
@@ -66,6 +67,7 @@ public class FirebaseRestManager : MonoBehaviour
                 if (!string.IsNullOrEmpty(response.idToken))
                 {
                     SaveAuthTokens(response);
+                    OnAuthStateChanged?.Invoke();
                     onSuccess?.Invoke();
                     Debug.Log("✅ Успешный вход в Firebase");
                 }
@@ -110,6 +112,7 @@ public class FirebaseRestManager : MonoBehaviour
                 if (!string.IsNullOrEmpty(response.idToken))
                 {
                     SaveAuthTokens(response);
+                    OnAuthStateChanged?.Invoke();
                     onSuccess?.Invoke();
                     Debug.Log("✅ Успешная регистрация в Firebase");
                 }
@@ -189,52 +192,6 @@ public class FirebaseRestManager : MonoBehaviour
         string json = Json.Serialize(data);
         string path = $"users/{currentUserId}/runs/{DateTime.UtcNow:yyyyMMddHHmmssfff}";
         StartCoroutine(PutDataCoroutine(path, json));
-    }
-
-    private Dictionary<string, object> GetLevelsData()
-    {
-        var levelsData = new Dictionary<string, object>();
-
-        for (int i = 1; i <= 5; i++)
-        {
-            float bestTime = PlayerPrefs.GetFloat($"Level_{i}_BestTime", Mathf.Infinity);
-            int coins = PlayerPrefs.GetInt($"Level_{i}_Coins", 0);
-
-            if (bestTime < Mathf.Infinity)
-            {
-                levelsData[$"level_{i}"] = new Dictionary<string, object>
-            {
-                { "bestTime", bestTime },
-                { "coinsCollected", coins },
-                { "completed", true }
-            };
-            }
-        }
-
-        return levelsData;
-    }
-
-    private void UpdateBestRun(float totalTime, string attemptId)
-    {
-        float currentBest = PlayerPrefs.GetFloat("BestCompletionTime", Mathf.Infinity);
-
-        if (totalTime < currentBest)
-        {
-            PlayerPrefs.SetFloat("BestCompletionTime", totalTime);
-            PlayerPrefs.SetString("BestRunId", attemptId);
-            PlayerPrefs.Save();
-
-            var bestRunData = new Dictionary<string, object>
-        {
-            { "attemptId", attemptId },
-            { "totalTime", totalTime },
-            { "timestamp", DateTime.UtcNow.ToUnixTimeSeconds() }
-        };
-
-            string json = Json.Serialize(bestRunData);
-            string path = $"users/{currentUserId}/bestRun";
-            StartCoroutine(PutDataCoroutine(path, json));
-        }
     }
 
     public void LoadLevelProgress(int levelIndex, Action<int, float> onLoaded)
@@ -340,6 +297,52 @@ public class FirebaseRestManager : MonoBehaviour
         }
     }
 
+    public void SaveBestGameTime(float totalTime)
+    {
+        if (!IsAuthenticated) return;
+        var data = new Dictionary<string, object>
+    {
+        { "bestTime", totalTime },
+        { "timestamp", DateTime.UtcNow.ToUnixTimeSeconds() }
+    };
+        string json = Json.Serialize(data);
+        string path = $"users/{currentUserId}/bestGameTime";
+        StartCoroutine(PutDataCoroutine(path, json));
+    }
+
+    public void LoadBestGameTime(Action<float> onLoaded)
+    {
+        if (!IsAuthenticated)
+        {
+            onLoaded?.Invoke(Mathf.Infinity);
+            return;
+        }
+
+        string path = $"users/{currentUserId}/bestGameTime";
+        StartCoroutine(GetDataCoroutine(path, (json) =>
+        {
+            if (string.IsNullOrEmpty(json) || json == "null")
+            {
+                onLoaded?.Invoke(Mathf.Infinity);
+                return;
+            }
+
+            try
+            {
+                var data = Json.Deserialize(json) as Dictionary<string, object>;
+                float time = data != null && data.ContainsKey("bestTime")
+                    ? Convert.ToSingle(data["bestTime"])
+                    : Mathf.Infinity;
+                onLoaded?.Invoke(time);
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"Ошибка загрузки bestGameTime: {e}");
+                onLoaded?.Invoke(Mathf.Infinity);
+            }
+        }));
+    }
+
     IEnumerator GetDataCoroutine(string path, Action<string> callback)
     {
         string url = $"{databaseUrl}/{path}.json?auth={idToken}";
@@ -386,6 +389,10 @@ public class FirebaseRestManager : MonoBehaviour
             if (Time.time >= tokenExpiryTime)
             {
                 RefreshToken();
+            }
+            else
+            {
+                OnAuthStateChanged?.Invoke();
             }
         }
     }

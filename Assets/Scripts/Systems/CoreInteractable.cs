@@ -64,7 +64,10 @@ public class CoreInteractable : MonoBehaviour
         if (other.CompareTag("Player"))
         {
             isPlayerInRange = false;
-            promptText?.gameObject.SetActive(false);
+            if (promptText != null && promptText.gameObject != null)
+            {
+                promptText.gameObject.SetActive(false);
+            }
             Debug.Log("🚪 Игрок покинул зону ядра");
         }
     }

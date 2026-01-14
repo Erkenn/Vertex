@@ -13,10 +13,8 @@ public class AbilityRechargeZone : MonoBehaviour
             PlayerController player = other.GetComponent<PlayerController>();
             if (player != null)
             {
-                // Восстанавливаем ВСЕ заряды
                 player.RestoreAbilityCharges(999);
 
-                // Эффекты
                 if (rechargeEffect != null)
                 {
                     Instantiate(rechargeEffect, transform.position, Quaternion.identity);
@@ -27,6 +25,8 @@ public class AbilityRechargeZone : MonoBehaviour
                 }
 
                 Debug.Log("🔋 Все способности восполнены!");
+
+                Destroy(gameObject);
             }
         }
     }

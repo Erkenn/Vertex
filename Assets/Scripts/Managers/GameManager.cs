@@ -3,6 +3,7 @@ using UnityEngine.SceneManagement;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine.UI;
+using UnityEngine.Video;
 
 public class GameManager : MonoBehaviour
 {
@@ -316,29 +317,35 @@ public class GameManager : MonoBehaviour
     {
         Debug.Log($"✅ Уровень {currentLevel} завершен!");
 
-        float bestTime = PlayerPrefs.GetFloat($"Level_{currentLevel}_BestTime", Mathf.Infinity);
-        bool isNewBest = sessionTimer < bestTime;
-
-        PlayerPrefs.SetInt($"Level_{currentLevel}_Coins", coinsCollected);
-
-        if (isNewBest)
+        // Загружаем текущий рекорд из Firebase
+        if (FirebaseRestManager.Instance != null && FirebaseRestManager.Instance.IsAuthenticated)
         {
-            PlayerPrefs.SetFloat($"Level_{currentLevel}_BestTime", sessionTimer);
-            Debug.Log($"🏆 Новый рекорд на уровне {currentLevel}!");
+            FirebaseRestManager.Instance.LoadLevelProgress(currentLevel, (savedCoins, savedTime) =>
+            {
+                bool isNewBest = sessionTimer < savedTime || savedTime <= 0;
+
+                if (isNewBest)
+                {
+                    FirebaseRestManager.Instance.SaveLevelProgress(
+                        currentLevel,
+                        coinsCollected,
+                        sessionTimer
+                    );
+                    Debug.Log($"☁️ Новый рекорд уровня {currentLevel} сохранён в Firebase");
+                }
+
+                ProceedAfterLevel();
+            });
         }
-
-        PlayerPrefs.Save();
-
-        if (isNewBest && FirebaseRestManager.Instance != null && FirebaseRestManager.Instance.IsAuthenticated)
+        else
         {
-            FirebaseRestManager.Instance.SaveLevelProgress(
-                currentLevel,
-                coinsCollected,
-                sessionTimer
-            );
-            Debug.Log($"☁️ Новый рекорд уровня {currentLevel} сохранён в Firebase");
+            // Если не авторизован — просто идём дальше без сохранения
+            ProceedAfterLevel();
         }
+    }
 
+    void ProceedAfterLevel()
+    {
         if (AudioManager.Instance != null)
         {
             AudioManager.Instance.PlaySFX("LevelComplete");
@@ -481,11 +488,11 @@ public class GameManager : MonoBehaviour
         Debug.Log("🎉 Победа! Все уровни пройдены!");
         isGameActive = false;
 
-        if (sessionTimer < bestCompletionTime)
+        if (FirebaseRestManager.Instance != null && FirebaseRestManager.Instance.IsAuthenticated)
         {
-            bestCompletionTime = sessionTimer;
-            PlayerPrefs.SetFloat("BestCompletionTime", bestCompletionTime);
+            FirebaseRestManager.Instance.SaveBestGameTime(sessionTimer);
         }
+
 
         if (UIManager.Instance != null)
         {
@@ -538,13 +545,72 @@ public class GameManager : MonoBehaviour
     public void CompleteTutorial()
     {
         Debug.Log("✅ Туториал завершен");
-
-        Time.timeScale = 1f;
         PlayerPrefs.SetInt("HasCompletedTutorial", 1);
         PlayerPrefs.Save();
 
-        // Начинаем с первого уровня
-        LoadLevel(1);
+        StartCoroutine(PlayIntroCutscenesThenLoadLevel1());
+    }
+
+    private IEnumerator PlayIntroCutscenesThenLoadLevel1()
+    {
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.StopMusic();
+
+        // === ВОССОЗДАЁМ CutsceneManager ИЗ ПРЕФАБА ===
+        if (CutsceneManager.Instance == null)
+        {
+            GameObject prefab = Resources.Load<GameObject>("CutsceneManager");
+            if (prefab != null)
+            {
+                Debug.Log("🔄 Создаём новый CutsceneManager из префаба");
+                Instantiate(prefab);
+
+                // Ждём один кадр, чтобы Awake() выполнился и Instance установился
+                yield return null;
+
+                // Доп. проверка
+                if (CutsceneManager.Instance == null)
+                {
+                    Debug.LogError("❌ CutsceneManager.Instance всё ещё null после Instantiate!");
+                    SceneManager.LoadScene("Level_1");
+                    yield break;
+                }
+            }
+            else
+            {
+                Debug.LogError("❌ Префаб 'CutsceneManager' не найден в Resources!");
+                SceneManager.LoadScene("Level_1");
+                yield break;
+            }
+        }
+
+        var cm = CutsceneManager.Instance;
+
+        // === КРИТИЧЕСКАЯ ПРОВЕРКА ===
+        if (cm.cutsceneCanvas == null || cm.videoPlayer == null)
+        {
+            Debug.LogError("❌ Поля cutsceneCanvas или videoPlayer не назначены в префабе!");
+            SceneManager.LoadScene("Level_1");
+            yield break;
+        }
+
+        VideoClip introA = Resources.Load<VideoClip>("Cutscenes/IntroA");
+        VideoClip introB = Resources.Load<VideoClip>("Cutscenes/IntroB");
+
+        if (introA == null || introB == null)
+        {
+            Debug.LogError("❌ Видео IntroA/IntroB не найдены в Resources/Cutscenes/");
+            SceneManager.LoadScene("Level_1");
+            yield break;
+        }
+
+        yield return cm.PlayCutscene(introA);
+        yield return cm.PlayCutscene(introB);
+
+        // После использования — уничтожаем (по вашему требованию)
+        CutsceneManager.DestroyInstance();
+
+        SceneManager.LoadScene("Level_1");
     }
 
     void OnEnable()
@@ -625,16 +691,12 @@ public class GameManager : MonoBehaviour
     public void CompleteFinalCore()
     {
         Debug.Log("🎉 Ядро взломано! Показываем финальную статистику");
-
         isGameActive = false;
         Time.timeScale = 1f;
 
-        // Сохраняем лучшее время
-        if (sessionTimer < bestCompletionTime)
+        if (FirebaseRestManager.Instance != null && FirebaseRestManager.Instance.IsAuthenticated)
         {
-            bestCompletionTime = sessionTimer;
-            PlayerPrefs.SetFloat("BestCompletionTime", bestCompletionTime);
-            PlayerPrefs.Save();
+            FirebaseRestManager.Instance.SaveBestGameTime(sessionTimer);
         }
 
         if (UIManager.Instance != null)

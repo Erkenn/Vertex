@@ -33,22 +33,38 @@ public class CutsceneManager : MonoBehaviour
 
     public IEnumerator PlayCutscene(VideoClip videoClip, System.Action onComplete = null)
     {
+        if (cutsceneCanvas == null || videoPlayer == null)
+        {
+            Debug.LogError("❌ CutsceneManager не настроен: cutsceneCanvas или videoPlayer = null");
+            onComplete?.Invoke();
+            yield break;
+        }
+
         onCutsceneFinished = onComplete;
 
         Time.timeScale = 0f;
 
-        cutsceneCanvas.SetActive(true);
+        // 🔒 ДОБАВЬТЕ ПРОВЕРКУ НА УНИЧТОЖЕННЫЙ ОБЪЕКТ
+        if (cutsceneCanvas == null)
+        {
+            Debug.LogError("❌ cutsceneCanvas уничтожен!");
+            Time.timeScale = 1f;
+            onComplete?.Invoke();
+            yield break;
+        }
+
+        cutsceneCanvas.SetActive(true); // ← теперь безопасно
 
         videoPlayer.clip = videoClip;
         var audioSource = GetComponent<AudioSource>();
         if (audioSource != null)
         {
             videoPlayer.audioOutputMode = VideoAudioOutputMode.AudioSource;
-            videoPlayer.SetTargetAudioSource(0, audioSource); // канал 0
+            videoPlayer.SetTargetAudioSource(0, audioSource);
         }
         else
         {
-            Debug.LogWarning("🔇 AudioSource не найден! Звук из видео не будет воспроизведён.");
+            Debug.LogWarning("🔇 AudioSource не найден!");
         }
 
         videoPlayer.Prepare();
