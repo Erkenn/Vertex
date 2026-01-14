@@ -19,6 +19,8 @@ public class Guardian : Enemy
     private Collider2D guardianCollider;
     private Vector2 moveDirection;
 
+    public AudioClip chaseStartSound;
+
     protected override void Start()
     {
         base.Start();
@@ -99,6 +101,11 @@ public class Guardian : Enemy
         {
             isChasing = true;
             Debug.Log($"🛡️ Страж {name} начал преследование!");
+
+            if (chaseStartSound != null && AudioManager.Instance != null)
+            {
+                AudioManager.Instance?.PlaySFX("GuardianChase");
+            }
         }
         else if (!playerDetected && isChasing)
         {

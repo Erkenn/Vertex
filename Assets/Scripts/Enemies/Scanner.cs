@@ -10,6 +10,9 @@ public class Scanner : Enemy
     public float scanDistance = 10f;
     public LayerMask playerLayer;
 
+    private AudioSource scannerAudioSource;
+    public AudioClip scanLoopSound;
+
     [Range(0, 90)]
     public float scanAngle = 45f; // по умолчанию 45°
 
@@ -19,6 +22,8 @@ public class Scanner : Enemy
     private bool hasKilledPlayer = false;
     public GameObject scannerLaserPrefab;
     private GameObject activeLaser;
+    private AudioSource scanAudioSource;
+    public AudioClip scanLoopClip;
 
     protected override void Start()
     {
@@ -34,6 +39,81 @@ public class Scanner : Enemy
 
         // Ориентация в начальную точку
         transform.position = patrolPoints[0].position;
+
+        scanAudioSource = gameObject.AddComponent<AudioSource>();
+        scanAudioSource.clip = scanLoopClip;
+        scanAudioSource.loop = true;
+        scanAudioSource.playOnAwake = false;
+        scanAudioSource.volume = 0.3f;
+
+        if (scanLoopClip != null && !isStunned)
+        {
+            scanAudioSource.Play();
+        }
+
+        UpdateSFXVolume();
+
+        if (scanLoopClip != null && !isStunned)
+        {
+            scanAudioSource.Play();
+        }
+
+        if (AudioManager.Instance != null)
+        {
+            AudioManager.OnSFXVolumeChanged += UpdateSFXVolume;
+        }
+    }
+
+    private void UpdateSFXVolume()
+    {
+        if (scanAudioSource == null || AudioManager.Instance == null) return;
+
+        float sfxVol = AudioManager.Instance.sfxVolume;
+        float masterVol = AudioManager.Instance.masterVolume;
+        scanAudioSource.volume = Mathf.Clamp01(sfxVol * masterVol * 0.5f); // 0.5f — ваш множитель
+    }
+
+    // === ПЕРЕОПРЕДЕЛЯЕМ RecoverFromStun ===
+    protected override void RecoverFromStun()
+    {
+        base.RecoverFromStun();
+
+        hasKilledPlayer = false;
+        HideLaser();
+
+        if (scanLoopClip != null && scanAudioSource != null && !scanAudioSource.isPlaying)
+        {
+            scanAudioSource.Play();
+        }
+    }
+
+    // === ПЕРЕОПРЕДЕЛЯЕМ GetStunned, чтобы остановить звук ===
+    public override void GetStunned(float duration)
+    {
+        // Сначала останавливаем звук
+        if (scanAudioSource != null && scanAudioSource.isPlaying)
+        {
+            scanAudioSource.Stop();
+        }
+
+        // Затем вызываем базовую логику оглушения
+        base.GetStunned(duration);
+    }
+
+    // === ОСТАНОВКА ЗВУКА ПРИ УНИЧТОЖЕНИИ ===
+    protected override void Die()
+    {
+        if (scanAudioSource != null)
+        {
+            scanAudioSource.Stop();
+        }
+
+        if (AudioManager.Instance != null)
+        {
+            AudioManager.OnSFXVolumeChanged -= UpdateSFXVolume;
+        }
+    
+        base.Die();
     }
 
     protected override void CustomBehavior()
@@ -136,13 +216,6 @@ public class Scanner : Enemy
         }
     }
 
-    // В RecoverFromStun() добавьте:
-    protected override void RecoverFromStun()
-    {
-        base.RecoverFromStun();
-        hasKilledPlayer = false;
-        HideLaser(); // Скрываем лазер при пробуждении
-    }
 
     private void KillPlayer()
     {
@@ -190,6 +263,14 @@ public class Scanner : Enemy
 
             Gizmos.color = Color.cyan;
             Gizmos.DrawLine(transform.position, (Vector2)transform.position + scanDirection * scanDistance);
+        }
+    }
+
+    private void OnDestroy()
+    {
+        if (AudioManager.Instance != null)
+        {
+            AudioManager.OnSFXVolumeChanged -= UpdateSFXVolume;
         }
     }
 

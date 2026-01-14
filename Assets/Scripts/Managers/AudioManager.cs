@@ -38,6 +38,8 @@ public class AudioManager : MonoBehaviour
     public AudioClip enemyDeath;
     public AudioClip turretShoot;
     public AudioClip scannerAlert;
+    public AudioClip scannerLoopSound;
+    public AudioClip guardianChaseStart;
 
     [Header("=== SFX - СИСТЕМЫ ===")]
     public AudioClip dataPacketCollect;
@@ -48,6 +50,7 @@ public class AudioManager : MonoBehaviour
     private Dictionary<string, AudioClip> sfxLibrary = new Dictionary<string, AudioClip>();
     private Coroutine musicFadeCoroutine;
     private AudioClip currentMusic;
+    public static System.Action OnSFXVolumeChanged;
 
     void Awake()
     {
@@ -89,7 +92,9 @@ public class AudioManager : MonoBehaviour
 
         PopulateSFXLibrary();
 
-        // ❌ НЕ запускаем музыку здесь — только через OnSceneLoaded
+        ApplyVolumes();
+
+        OnSFXVolumeChanged?.Invoke();
     }
 
     void OnSceneLoaded(Scene scene, LoadSceneMode mode)
@@ -130,6 +135,8 @@ public class AudioManager : MonoBehaviour
         AddSFXToLibrary("EnemyDeath", enemyDeath);
         AddSFXToLibrary("TurretShoot", turretShoot);
         AddSFXToLibrary("ScannerAlert", scannerAlert);
+        AddSFXToLibrary("ScannerLoop", scannerLoopSound);
+        AddSFXToLibrary("GuardianChase", guardianChaseStart);
 
         AddSFXToLibrary("DataPacketCollect", dataPacketCollect);
         AddSFXToLibrary("UIClick", uiClick);
@@ -311,12 +318,13 @@ public class AudioManager : MonoBehaviour
     public void SetSFXVolume(float volume)
     {
         sfxVolume = Mathf.Clamp01(volume);
-        // SFX источники создаются временно, поэтому просто сохраняем — ✅
-        // Но для UI-звука (uiSource) — можно обновить
+
         if (uiSource != null)
             uiSource.volume = Mathf.Clamp01(sfxVolume * masterVolume);
+
         SaveAudioSettings();
         Debug.Log($"🔊 SFX: {sfxVolume:F2}");
+        OnSFXVolumeChanged?.Invoke();
     }
 
     void ApplyVolumes()

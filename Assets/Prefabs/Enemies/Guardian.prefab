@@ -178,7 +178,6 @@ MonoBehaviour:
   health: 1
   moveSpeed: 6
   scoreValue: 100
-  isActive: 1
   isStunned: 0
   detectionDistance: 15
   attackRate: 1
@@ -189,3 +188,4 @@ MonoBehaviour:
     m_Bits: 1
   chaseSpeed: 6
   attackRange: 1.5
+  chaseStartSound: {fileID: 8300000, guid: 09ca0625f9a4db0498c841f65eec0f5e, type: 3}

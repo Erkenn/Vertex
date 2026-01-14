@@ -1043,19 +1043,19 @@ public class MainMenuManager : MonoBehaviour
         // === ЛИЧНАЯ СТАТИСТИКА ===
         if (userBestGameTime < Mathf.Infinity)
         {
-            sb.AppendLine($"<b>🏆 ВАШЕ ЛУЧШЕЕ ВРЕМЯ</b>");
-            sb.AppendLine($"⏱ {FormatTime(userBestGameTime)}\n");
+            sb.AppendLine($"<b>ВАШЕ ЛУЧШЕЕ ВРЕМЯ</b>");
+            sb.AppendLine($"{FormatTime(userBestGameTime)}\n");
         }
 
         // === ГЛОБАЛЬНЫЙ ТОП-3 ===
         if (globalLeaderboard.Count > 0)
         {
-            sb.AppendLine("<b>🌍 ГЛОБАЛЬНЫЙ ТОП-3</b>");
+            sb.AppendLine("<b>ГЛОБАЛЬНЫЙ ТОП-3</b>");
             var top3 = globalLeaderboard.Take(3);
             for (int i = 0; i < top3.Count(); i++)
             {
                 var entry = top3.ElementAt(i);
-                string medal = i == 0 ? "🥇" : (i == 1 ? "🥈" : "🥉");
+                string medal = i == 0 ? "" : (i == 1 ? "" : "");
                 sb.AppendLine($"{medal} {entry.DisplayName}: {FormatTime(entry.TotalTime)}");
             }
             sb.AppendLine("");
@@ -1064,7 +1064,7 @@ public class MainMenuManager : MonoBehaviour
         // === ВАШЕ МЕСТО ===
         if (currentPlayerRank > 0)
         {
-            string placeText = currentPlayerRank <= 3 ? "🏆 Вы в топ-3!" : $"📍 Ваше место: #{currentPlayerRank}";
+            string placeText = currentPlayerRank <= 3 ? "Вы в топ-3!" : $"Ваше место: #{currentPlayerRank}";
             sb.AppendLine(placeText);
             sb.AppendLine("");
         }
@@ -1078,8 +1078,8 @@ public class MainMenuManager : MonoBehaviour
                 hasLevelData = true;
                 int coins = userCoins.TryGetValue(level, out int c) ? c : 0;
                 sb.AppendLine($"<b>Уровень {level}</b>");
-                sb.AppendLine($"  ⏱ Время: {FormatTime(bestTime)}");
-                sb.AppendLine($"  🪙 Монеты: {coins}");
+                sb.AppendLine($"Время: {FormatTime(bestTime)}");
+                sb.AppendLine($"Монеты: {coins}");
                 sb.AppendLine("");
             }
         }

@@ -168,7 +168,6 @@ MonoBehaviour:
   health: 1
   moveSpeed: 3
   scoreValue: 100
-  isActive: 1
   isStunned: 0
   patrolPoints:
   - {fileID: 0}
@@ -178,5 +177,7 @@ MonoBehaviour:
   playerLayer:
     serializedVersion: 2
     m_Bits: 1
+  scanLoopSound: {fileID: 8300000, guid: 5bf4e1d5ab150364bb08c1256fb1aafe, type: 3}
   scanAngle: 45
   scannerLaserPrefab: {fileID: 8662900375198858406, guid: f691a331c3a5f0c47846b0c13ba671f9, type: 3}
+  scanLoopClip: {fileID: 8300000, guid: 5bf4e1d5ab150364bb08c1256fb1aafe, type: 3}
